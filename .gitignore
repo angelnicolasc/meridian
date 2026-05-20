@@ -1,0 +1,75 @@
+# --- Rust ---
+/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+*.so
+*.dylib
+*.dll
+
+# --- maturin / pyo3 ---
+wheels/
+
+# --- CUDA / native build ---
+*.cu.o
+*.cubin
+*.ptx
+*.fatbin
+compile_commands.json
+.cmake/
+cmake-build-*/
+
+# --- mdbook ---
+/docs/book/
+
+# --- OS / editors ---
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# --- env / secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- benchmark artifacts ---
+/criterion/
+/target/criterion/
+flamegraph.svg
+perf.data*
+
+# --- SBOM / artifacts ---
+*.cdx.json
+*.cdx.xml
+*.spdx.json
+sbom-*.json
+
+# ── INTERNAL: excluded from public git ───────────────────────────────────────
+Research/
+DEVLOG.md
+# ─────────────────────────────────────────────────────────────────────────────

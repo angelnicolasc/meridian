@@ -1,0 +1,8 @@
+# DeepSeek-R1 / DeepSeek-R1-Distill family token boundaries.
+# Token ids match the published `deepseek-ai/DeepSeek-R1` tokenizer (June 2026).
+
+[model.deepseek_r1]
+think_start_token_ids  = [128799]   # "<think>"
+think_end_token_ids    = [128800]   # "</think>"
+reasoning_parser       = "deepseek_r1"
+supports_think_disable = false

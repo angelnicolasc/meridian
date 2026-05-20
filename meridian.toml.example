@@ -1,0 +1,170 @@
+# ============================================================================
+# meridian.toml — operator-facing configuration for the Meridian scheduler.
+#
+# Every default below is annotated with the rationale we used to pick it.
+# Tune by overlay: keep this file untouched and ship a smaller `meridian.toml`
+# that only sets fields you actually need to change.
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# [scheduler]
+# Dual-queue scheduling policy. See ADR-0001 for why two queues rather than
+# priority weights on a single queue.
+# ---------------------------------------------------------------------------
+[scheduler]
+
+# TPOT budget for THINK tokens, in milliseconds.
+# Rationale: think-decode is throughput-bound and the user does not see
+# inter-token latency during reasoning. Setting this 4× the output budget
+# gives the batcher room to pack a larger effective batch during think.
+think_tpot_budget_ms = 80.0
+
+# TPOT budget for OUTPUT tokens, in milliseconds.
+# Rationale: this is the user-visible streaming latency. 20 ms keeps streams
+# fluid on a 30–50 tok/s display target.
+output_tpot_budget_ms = 20.0
+
+# Think-phase batch can fill this multiple of the output-phase token budget.
+# Rationale: 2.5× is conservative — empirically you can push to 3.5× on H100
+# class hardware with MLA-aware allocation, but 2.5× gives a stable defaults
+# baseline that does not destabilise output ITL variance.
+think_batch_multiplier = 2.5
+
+# Absolute hard cap on think tokens regardless of entropy signals.
+# Rationale: safety valve against a stuck-loop model. 32k matches DeepSeek-R1's
+# documented max reasoning length and bounds the KV memory a single request
+# can monopolise.
+max_think_tokens = 32768
+
+# Floor: no budget forcing is allowed before this many think tokens.
+# Rationale: EAT/RPDI signals are noisy below 512 tokens — forcing earlier
+# can prematurely terminate short-but-correct chains. The original EAT paper
+# (arXiv:2509.26522) uses the same floor.
+min_think_tokens = 512
+
+
+# ---------------------------------------------------------------------------
+# [entropy]
+# Entropy probe and convergence-detection thresholds.
+# ---------------------------------------------------------------------------
+[entropy]
+
+# Whether the entropy probe is active. With it disabled, the system falls back
+# to pure token-count budget forcing using only max_think_tokens.
+enabled = true
+
+# EMA decay applied to all entropy signals. Small alpha = long memory.
+# Rationale: α = 0.05 → ~95% mass within last ~60 samples — long enough to
+# smooth single-token spikes, short enough to react inside a reasoning chain.
+ema_alpha = 0.05
+
+# Ratio (rpdi_local / rpdi_global) above which overthinking is declared.
+# Rationale: ratio above 3.0 means the local transition-token frequency is
+# triple the global rate — the empirical RPDI threshold from arXiv:2603.14251.
+rpdi_threshold = 3.0
+
+# EAT EMA variance below which convergence is declared.
+# Rationale: 0.001 is roughly the noise floor of EAT in steady-state. Set
+# tighter to defer forcing further; looser to be more aggressive.
+eat_ema_variance_threshold = 0.001
+
+# Token entropy (nats) above which a token counts as a "transition" for RPDI.
+# Rationale: 2.5 nats ≈ effective branching factor of 12 — a meaningful
+# decision point, not noise.
+transition_entropy_threshold = 2.5
+
+# Run the EAT kernel every N think tokens. 1 = every token; higher trades
+# signal latency for kernel-launch overhead. 32 is the sweet spot on H100.
+eat_probe_interval_tokens = 32
+
+
+# ---------------------------------------------------------------------------
+# [kv_memory]
+# Phase-aware KV block manager policy.
+# ---------------------------------------------------------------------------
+[kv_memory]
+
+# Free think-phase blocks immediately on phase transition.
+# Rationale: leave `false` until cross-attention back-references are audited;
+# some reasoning-parser pipelines re-attend over the think segment when
+# generating output and need those blocks resident.
+aggressive_think_eviction = false
+
+# Fraction of total KV budget reserved for think-phase blocks.
+# Rationale: 0.40 lets the think batch grow large (think_batch_multiplier =
+# 2.5×) without crowding output. Raise if your workload skews heavily toward
+# reasoning, lower if it skews toward long outputs.
+think_phase_memory_fraction = 0.40
+
+# Per-block size in bytes. The canonical vLLM layout is 16 KiB per block for
+# bf16/fp16 KV at 16 tokens per block. MLA-aware models can run smaller blocks
+# (latent_dim * bytes_per_element * tokens_per_block) — set this to the actual
+# value for your model layout.
+block_size_bytes = 16384
+
+# Total KV memory budget. Use "auto" to let the plugin query the device at
+# startup (uses 85 % of `torch.cuda.mem_get_info().total`) or pin an integer
+# byte count for deterministic deployments.
+capacity_bytes = "auto"
+
+
+# ---------------------------------------------------------------------------
+# [disagg]
+# Disaggregated KV transfer (ADR-0006). Off by default; opt in only if you
+# have a NIXL or Mooncake fabric available.
+# ---------------------------------------------------------------------------
+[disagg]
+
+# Master switch. Leave `false` for single-node deployments.
+enabled = false
+
+# Fabric selector. `nixl` is the NVIDIA-blessed reference; `mooncake` is the
+# protocol-compatible adapter; `none` disables disagg even when `enabled = true`
+# (validation will reject that combination).
+fabric = "none"
+
+# Minimum number of `ThinkComplete` blocks to accumulate before flushing to
+# the fabric. Larger batches amortise transfer overhead at the cost of
+# briefly holding cold blocks resident.
+offload_threshold_blocks = 4
+
+
+# ---------------------------------------------------------------------------
+# [model.*]
+# Per-model token-boundary configuration. The phase router watches for these
+# ids in the decoded stream to detect <think>/</think> transitions.
+# Token ids are model- and tokenizer-specific — see models/*.toml for the
+# vetted set.
+# ---------------------------------------------------------------------------
+
+[model.deepseek_r1]
+# DeepSeek-R1 tokenizes "\n<think>\n" and "\n</think>\n" as distinct ids; we
+# include both so a model that emits either flavor still triggers transition.
+think_start_token_ids = [128799]
+think_end_token_ids   = [128800]
+reasoning_parser      = "deepseek_r1"
+supports_think_disable = false
+
+[model.qwen3]
+think_start_token_ids  = [151648]
+think_end_token_ids    = [151649]
+reasoning_parser       = "qwen3"
+supports_think_disable = true
+
+[model.granite_3_2]
+# IBM Granite uses prose markers instead of distinct tokens. The router accepts
+# the tokenized representation of "Here is my thought process:" and
+# "Here is my response:" produced by the model's tokenizer.
+think_start_token_ids  = []
+think_end_token_ids    = []
+reasoning_parser       = "granite"
+supports_think_disable = false
+
+[model.claude_opus_4]
+# Claude 4.x serves through Anthropic's API, not vLLM directly. This entry is
+# kept so future Meridian deployments behind an Anthropic-proxy can share
+# config conventions.
+think_start_token_ids  = []
+think_end_token_ids    = []
+reasoning_parser       = "anthropic"
+supports_think_disable = true

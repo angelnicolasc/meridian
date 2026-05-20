@@ -1,0 +1,48 @@
+# Pre-commit hooks. Install once with: `pre-commit install --install-hooks`
+# Mirror of the linting layer of CI. Anything that fails here also fails CI.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      - id: fmt
+        args: ["--all", "--", "--check"]
+      - id: clippy
+        args: ["--workspace", "--all-targets", "--", "-D", "warnings"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        args: ["--strict", "--config-file=python/pyproject.toml"]
+        additional_dependencies:
+          - "numpy>=2.0"
+          - "pydantic>=2.9"
+          - "types-toml"
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.6.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: ["--strict", "core", "kernels", "python", "ci", "docs", "adr", "deps", "bench"]

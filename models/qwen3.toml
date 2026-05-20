@@ -1,0 +1,8 @@
+# Qwen3 family token boundaries (Qwen3-30B-A3B, Qwen3-235B-A22B-Thinking).
+# Token ids match the published `Qwen/Qwen3-30B-A3B` tokenizer (April 2026).
+
+[model.qwen3]
+think_start_token_ids  = [151648]   # "<think>"
+think_end_token_ids    = [151649]   # "</think>"
+reasoning_parser       = "qwen3"
+supports_think_disable = true       # Qwen3 supports `/no_think` directive

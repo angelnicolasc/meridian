@@ -1,0 +1,19 @@
+# Workspace-wide cargo settings.
+# Keep this file conservative: anything here applies to every contributor's local build.
+
+[build]
+# Surface diagnostics in the form GitHub annotations understands.
+rustflags = ["-Dwarnings"]
+
+[net]
+git-fetch-with-cli = true
+
+# Use sparse registry protocol — faster index updates on CI.
+[registries.crates-io]
+protocol = "sparse"
+
+[alias]
+xtask    = "run --package xtask --"
+ci       = "nextest run --workspace --all-features"
+lint     = "clippy --workspace --all-targets --all-features -- -D warnings"
+docs     = "doc --workspace --no-deps --all-features"

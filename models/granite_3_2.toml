@@ -1,0 +1,11 @@
+# IBM Granite 3.2 reasoning model boundaries.
+# Granite uses prose markers ("Here is my thought process:" /
+# "Here is my response:") rather than distinct token ids. The vLLM
+# `granite` reasoning parser handles boundary detection at the string level;
+# Meridian's router falls back to count-only budget forcing for this model.
+
+[model.granite_3_2]
+think_start_token_ids  = []
+think_end_token_ids    = []
+reasoning_parser       = "granite"
+supports_think_disable = false

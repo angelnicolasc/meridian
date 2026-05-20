@@ -1,0 +1,10 @@
+# Claude Opus 4.x — served by Anthropic, not by vLLM. This config is kept so
+# future Meridian deployments fronted by an Anthropic proxy share the
+# per-model config convention. Token ids are not exposed by Anthropic's API,
+# so the router uses Anthropic's `thinking` block delimiters.
+
+[model.claude_opus_4]
+think_start_token_ids  = []
+think_end_token_ids    = []
+reasoning_parser       = "anthropic"
+supports_think_disable = true

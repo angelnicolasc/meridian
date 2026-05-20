@@ -1,0 +1,25 @@
+# Normalize line endings for portable text formats.
+* text=auto eol=lf
+
+# Rust / Python / TOML / Markdown
+*.rs   text eol=lf
+*.py   text eol=lf
+*.toml text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.sh   text eol=lf
+
+# Treat CUDA sources as text but never alter.
+*.cu  text eol=lf
+*.cuh text eol=lf
+
+# Binaries we never want diffed.
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.pdf  binary
+
+# Lockfiles: never collapse in diff views — engineers should be able to audit pinned versions.
+Cargo.lock linguist-generated=false
+uv.lock    linguist-generated=false

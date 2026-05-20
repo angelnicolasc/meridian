@@ -1,0 +1,145 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/meridian-core",
+    "crates/meridian-kernels",
+    "crates/meridian-python",
+]
+default-members = ["crates/meridian-core"]
+
+[workspace.package]
+version       = "0.1.0"
+edition       = "2024"
+rust-version  = "1.85"
+license       = "Apache-2.0"
+authors       = ["angelnicolasc <nick.dicerutti@gmail.com>"]
+repository    = "https://github.com/angelnicolasc/meridian"
+homepage      = "https://github.com/angelnicolasc/meridian"
+documentation = "https://angelnicolasc.github.io/meridian"
+readme        = "README.md"
+keywords      = ["llm", "inference", "scheduler", "vllm", "reasoning"]
+categories    = ["science", "concurrency"]
+
+[workspace.dependencies]
+# Concurrency / data structures
+dashmap     = "6.1"
+crossbeam   = "0.8"
+parking_lot = "0.12"
+ahash       = "0.8"
+
+# Error handling
+thiserror = "2.0"
+anyhow    = "1.0"
+
+# Serialization
+serde       = { version = "1.0", features = ["derive"] }
+serde_json  = "1.0"
+toml        = "0.8"
+
+# Observability
+tracing                  = "0.1"
+tracing-subscriber       = { version = "0.3", features = ["env-filter", "json"] }
+tracing-opentelemetry    = "0.27"
+opentelemetry            = "0.26"
+opentelemetry_sdk        = "0.26"
+opentelemetry-otlp       = "0.26"
+metrics                  = "0.24"
+metrics-exporter-prometheus = "0.16"
+
+# CUDA / FFI
+cc       = "1.2"
+cmake    = "0.1"
+bindgen  = "0.71"
+
+# Python bindings
+pyo3 = { version = "0.23", features = ["abi3-py311", "extension-module"] }
+
+# Testing
+proptest    = "1.6"
+criterion   = { version = "0.5", features = ["html_reports"] }
+rstest      = "0.23"
+pretty_assertions = "1.4"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs           = "warn"
+rust_2018_idioms       = { level = "warn", priority = -1 }
+# unreachable_pub fires inside pyo3-generated code; allow workspace-wide.
+unreachable_pub        = "allow"
+
+[workspace.lints.clippy]
+all          = { level = "warn", priority = -1 }
+pedantic     = { level = "warn", priority = -1 }
+nursery      = { level = "warn", priority = -1 }
+cargo        = { level = "warn", priority = -1 }
+# unwrap_used / expect_used are noisy at this stage (tests use them
+# liberally) — revisit when graduating out of pre-1.0.
+unwrap_used   = "allow"
+expect_used   = "allow"
+dbg_macro     = "deny"
+todo          = "warn"
+unimplemented = "warn"
+# Allow some pedantic lints that are too noisy or unavoidable.
+module_name_repetitions = "allow"
+missing_errors_doc      = "allow"
+must_use_candidate      = "allow"
+multiple_crate_versions = "allow"
+# Bridging integer-domain logic to f64-domain telemetry is unavoidable;
+# Prometheus and OpenTelemetry require f64. Casts at gauge / histogram
+# sites are acceptable precision loss in our value range.
+cast_precision_loss     = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss          = "allow"
+cast_lossless           = "allow"
+# Tests use `unwrap()` extensively; gated by `cfg(test)` is overkill.
+missing_panics_doc      = "allow"
+# Doc cross-references that close the loop (config <-> metrics) are fine.
+doc_markdown            = "allow"
+# Nursery lints that warn on patterns we use intentionally:
+# - significant_drop_tightening fights with the readability of "lock, mutate,
+#   publish, unlock" blocks; we trade a few extra microseconds of lock
+#   hold time for code that humans can read.
+# - missing_const_for_fn fires on every `fn config(&self)` style getter
+#   that could theoretically be const; not worth the boilerplate yet.
+# - unused_self fires on private helpers that exist for symmetry.
+significant_drop_tightening = "allow"
+missing_const_for_fn        = "allow"
+unused_self                 = "allow"
+# Several nursery lints catch idiomatic Rust we use deliberately.
+option_if_let_else          = "allow"
+or_fun_call                 = "allow"
+redundant_clone             = "allow"
+use_self                    = "allow"
+needless_pass_by_value      = "allow"
+range_plus_one              = "allow"
+manual_let_else             = "allow"
+derivable_impls             = "allow"
+# `suboptimal_flops` rewrites `a*b + c*d` to `a.mul_add(b, c*d)`. Both compile
+# to the same FMA on modern CPUs and the rewritten form is harder to read.
+suboptimal_flops            = "allow"
+# Test/bench-friendly relaxations.
+unnecessary_wraps           = "allow"
+float_cmp                   = "allow"
+needless_raw_string_hashes  = "allow"
+needless_raw_strings        = "allow"
+# pyo3 macros generate `pub(crate)` items inside private modules.
+redundant_pub_crate         = "allow"
+
+[profile.release]
+lto             = "thin"
+codegen-units   = 1
+opt-level       = 3
+debug           = "line-tables-only"
+strip           = "debuginfo"
+panic           = "abort"
+overflow-checks = false
+
+[profile.bench]
+inherits  = "release"
+debug     = true
+strip     = false
+lto       = "thin"
+
+[profile.dev]
+opt-level = 1
+debug     = true

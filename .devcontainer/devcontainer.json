@@ -1,0 +1,44 @@
+{
+  "name": "meridian-dev",
+  "build": { "dockerfile": "Dockerfile", "context": ".." },
+  "runArgs": [
+    "--gpus", "all",
+    "--ipc=host",
+    "--ulimit", "memlock=-1",
+    "--ulimit", "stack=67108864"
+  ],
+  "remoteUser": "vscode",
+  "containerEnv": {
+    "CARGO_TERM_COLOR": "always",
+    "RUST_BACKTRACE": "1"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "vadimcn.vscode-lldb",
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "ms-python.mypy-type-checker",
+        "ms-vscode.cmake-tools",
+        "nvidia.nsight-vscode-edition"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "rust-analyzer.check.command": "clippy",
+        "rust-analyzer.cargo.allFeatures": false,
+        "python.defaultInterpreterPath": "/workspaces/meridian/python/.venv/bin/python"
+      }
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "mounts": [
+    "source=meridian-cargo-cache,target=/home/vscode/.cargo,type=volume",
+    "source=meridian-uv-cache,target=/home/vscode/.cache/uv,type=volume"
+  ]
+}
