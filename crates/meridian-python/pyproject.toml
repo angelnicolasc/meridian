@@ -22,7 +22,7 @@ classifiers = [
 
 [tool.maturin]
 module-name        = "meridian._meridian"
-python-source      = "../python"
+python-source      = "../../python"
 features           = ["pyo3/extension-module"]
 strip              = true
 manifest-path      = "Cargo.toml"
