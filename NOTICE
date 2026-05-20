@@ -1,0 +1,18 @@
+Meridian
+Copyright 2026 angelnicolasc
+
+This product includes software developed by angelnicolasc.
+Licensed under the Apache License, Version 2.0 (the "License"); see
+LICENSE for the full terms.
+
+This software references research published in the following works,
+which are not redistributed but whose ideas inform the design:
+
+  - "Think Deep, Not Just Long"        arXiv:2602.13517
+  - "Entropy After </think> (EAT)"     arXiv:2509.26522
+  - "Reasoning Path Deviation Index"   arXiv:2603.14251
+  - s1 Budget Forcing (Muennighoff et al., 2025)
+  - DUCHESS                            arXiv:2509.24957
+
+This software integrates with vLLM (Apache-2.0) as a scheduler plugin
+without forking or redistributing its source.
