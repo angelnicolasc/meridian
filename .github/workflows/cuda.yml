@@ -43,7 +43,7 @@ jobs:
       - name: Run CUDA correctness tests
         run: cargo test -p meridian-kernels --features cuda --release -- --include-ignored
 
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-dependency-glob: python/pyproject.toml
