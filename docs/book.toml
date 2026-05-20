@@ -6,7 +6,7 @@ src      = "src"
 
 [output.html]
 git-repository-url    = "https://github.com/angelnicolasc/meridian"
-git-repository-icon   = "fab fa-github"
+git-repository-icon   = "fa-brands fa-github"
 edit-url-template     = "https://github.com/angelnicolasc/meridian/edit/main/docs/{path}"
 site-url              = "/meridian/"
 default-theme         = "ayu"
