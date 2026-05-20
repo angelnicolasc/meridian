@@ -113,7 +113,56 @@ with a CPU profile.
 
 ---
 
-### `meridian.disagg.blocks_offloaded{fabric=...}` *(when disagg is active)*
+### `meridian.block_manager.used_bytes`
+
+| Property | Value |
+|----------|-------|
+| Type | gauge |
+| Unit | bytes |
+| Cardinality | 1 series |
+| Source | `PhaseAwareBlockManager` |
+| Why | Total KV bytes currently allocated across all tiers. Rising towards `kv_memory.capacity_bytes` predicts incoming eviction pressure. |
+
+**Operator action**: alert when `block_manager.used_bytes / capacity_bytes` exceeds
+0.90 for 10 minutes — this is the early-warning threshold before
+`output_critical_eviction` events begin.
+
+---
+
+### `meridian.block_manager.evictions{tier=...}`
+
+| Property | Value |
+|----------|-------|
+| Type | counter |
+| Unit | events |
+| Labels | `tier` ∈ `{think_complete, think_active, output_critical}` |
+| Cardinality | 3 series |
+| Source | `PhaseAwareBlockManager` |
+| Why | Per-tier eviction rate reveals the shape of memory pressure. `think_complete` evictions are routine; `think_active` indicates moderate pressure; `output_critical` is a user-visible degradation event identical to `meridian.output_critical_eviction`. |
+
+**Operator action**: alert on any `tier=output_critical` increment — use this
+series or `meridian.output_critical_eviction`, whichever is easier to route in
+your alerting stack.
+
+---
+
+### `meridian.scheduler.batch_size{phase=...}`
+
+| Property | Value |
+|----------|-------|
+| Type | histogram |
+| Unit | slots |
+| Labels | `phase` ∈ `{output, think}` |
+| Cardinality | 2 series |
+| Source | `MeridianScheduler` |
+| Why | Distribution of actual batch sizes delivered to the vLLM worker per phase. A consistently small `output` batch under load means output requests are draining faster than think-phase completions replenish the pool. |
+
+**Operator action**: compare `scheduler.batch_size{phase=output}` P50 against
+`queue_depth{queue=output}` to verify output requests are being served promptly.
+
+---
+
+### `meridian.disagg.blocks_offloaded{fabric=...}` *(planned — not yet emitted in v0.1.x)*
 
 | Property | Value |
 |----------|-------|
@@ -126,7 +175,7 @@ with a CPU profile.
 
 ---
 
-### `meridian.disagg.offload_bytes{fabric=...}` *(when disagg is active)*
+### `meridian.disagg.offload_bytes{fabric=...}` *(planned — not yet emitted in v0.1.x)*
 
 | Property | Value |
 |----------|-------|
@@ -151,6 +200,8 @@ reconstructed from trace data.
 | Metric | Alert condition | Severity |
 |--------|-----------------|----------|
 | `output_critical_eviction` | rate > 0 for 5 min | High — user-visible |
+| `block_manager.evictions{tier=output_critical}` | rate > 0 for 1 min | High — user-visible (same event, finer label) |
+| `block_manager.used_bytes` | > 90% of capacity for 10 min | Medium — pre-eviction warning |
 | `queue_depth{queue=think}` | P95 > 4× baseline for 5 min with no forcing | Medium — starvation risk |
 | `budget_force_reason{reason=hard_cap}` | ratio > 0.5 over 1 h | Low — probe investigation |
 | `phase_router.tracked_requests` | monotonically growing > 15 min | Low — reap misconfiguration |

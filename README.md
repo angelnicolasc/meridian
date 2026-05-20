@@ -47,12 +47,12 @@ Meridian exploits the asymmetry.
 | `MeridianScheduler` dual-queue dispatch | ✓ | — |
 | `PhaseAwareBlockManager` three-tier eviction | ✓ | — |
 | `EntropyProbe` CPU backend (NumPy) | ✓ | — |
-| `EntropyProbe` CUDA backend — correctness vs CPU | — | ✓ |
-| vLLM plugin — attach / detach / reorder / inject | ✓ | ✓ |
+| `meridian-kernels` CUDA kernels — EAT/entropy correctness vs CPU | — | ✓ |
+| vLLM plugin — attach / reorder / inject | ✓ | ✓ |
 | Disagg block manager surface (`offload_block`, `ingest_block`) | ✓ | — |
 | NIXL fabric wire protocol (synthetic mock) | ✓ | — |
-| Benchmark harness — synthetic A/B | ✓ | — |
-| Benchmark harness — real-vLLM with `Qwen2.5-0.5B` | — | ✓ |
+| Benchmark harness — synthetic replay | ✓ | ✓ |
+| Benchmark harness — real-vLLM with `Qwen2.5-0.5B` | — | — |
 | SLSA L2 provenance attestation | ✓ (on every `v*` tag) | — |
 | `cargo deny` supply-chain audit | ✓ | — |
 

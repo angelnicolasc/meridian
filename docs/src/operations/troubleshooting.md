@@ -64,8 +64,11 @@ called.
 2. Check the reap interval in the plugin config — default 60 s. If request lifetime
    is shorter than 60 s on average, the reaper may be lagging.
 
-**Immediate mitigation**: call `plugin.reap_stale_now()` manually via the debug CLI
-if available.
+**Immediate mitigation**: no manual reap trigger is exposed in v0.1.x. The plugin
+calls `router.reap_stale_older_than(60.0)` automatically every 64 `schedule()`
+invocations; under active serving load this fires within seconds. To force an
+immediate reap at deploy time, temporarily lower `_reap_interval_schedules` in
+`vllm_plugin.py` to `1`.
 
 **Longer-term fix**: reduce the reap period in `vllm_plugin.py` or ensure `post_step`
 receives every EOS signal from the vLLM worker.
@@ -73,6 +76,11 @@ receives every EOS signal from the vLLM worker.
 ---
 
 ## CUDA kernel returns `Unavailable`
+
+> **Sprint 0 note**: `python/meridian/_backends/cuda.py` currently delegates to
+> `CpuEntropyBackend`; `KernelError::Unavailable` cannot be triggered through
+> the Python probe in v0.1.x. The scenario below applies once Sprint 1 wires
+> the Python backend to the Rust kernel path in `crates/meridian-kernels/`.
 
 **Symptom**: logs show `KernelError::Unavailable`; entropy probe silently falls back
 to CPU; `meridian.budget_force_reason{reason=hard_cap}` is the only firing signal.
@@ -82,9 +90,17 @@ or `libcudart.so` is not on the dynamic linker path at runtime.
 
 **How to verify**:
 ```bash
-# Check the linked backend.
-python -c "from meridian._backends.cuda import cuda_available; print(cuda_available())"
-# Should print True on a CUDA-capable host. Prints False if the stub was linked.
+# Confirm the Python extension loads and report the current backend behaviour.
+python -c "
+from meridian._backends.cuda import CudaEntropyBackend
+b = CudaEntropyBackend()
+print('backend name:', b.name)
+# Sprint 0: always prints 'cuda' but delegates to CPU internally.
+# Real CUDA dispatch requires a --features cuda build (Sprint 1).
+"
+
+# Confirm the Rust kernels extension is importable.
+python -c "import meridian._meridian; print('native extension OK')"
 ```
 
 **Immediate mitigation**: the CPU fallback is correct — entropy values are identical.
@@ -129,12 +145,14 @@ was attached to a different scheduler instance than the one the engine uses.
 
 **How to verify**:
 ```python
-print(type(engine.scheduler))
+print(type(engine.scheduler[0]))
 # Should print: <class 'meridian.vllm_plugin.MeridianSchedulerPlugin'>
 # Not: <class 'vllm.core.scheduler.Scheduler'>
 ```
 
-**Immediate mitigation**: call `plugin.attach()` explicitly after engine construction.
+**Immediate mitigation**: call `MeridianSchedulerPlugin.attach(engine, cfg, model_key="...")` 
+explicitly after engine construction. `attach` is a classmethod — it constructs
+the plugin and replaces `engine.scheduler[0]` in one step.
 
 **Longer-term fix**: verify the plugin initialisation order in the serving entrypoint.
 The plugin must be attached after `AsyncLLMEngine` is fully constructed but before

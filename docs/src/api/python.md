@@ -56,16 +56,21 @@ and detach. Holds no GPU resources; all GPU work goes through the underlying
 vLLM scheduler.
 
 ```python
+from vllm import AsyncLLMEngine
+from vllm.engine.arg_utils import AsyncEngineArgs
 from meridian import load_config
 from meridian.vllm_plugin import MeridianSchedulerPlugin
 
+engine = AsyncLLMEngine.from_engine_args(AsyncEngineArgs(model="Qwen/Qwen2.5-0.5B"))
 cfg = load_config("meridian.toml")
-plugin = MeridianSchedulerPlugin(scheduler=engine.scheduler, config=cfg)
-plugin.attach()  # Replaces engine.scheduler with the wrapped version.
+
+# attach() is a classmethod — constructs the plugin, installs it as
+# engine.scheduler[0], and returns the handle for metric access.
+plugin = MeridianSchedulerPlugin.attach(engine, cfg, model_key="qwen3")
 
 # ... serve requests ...
 
-plugin.detach()  # Restores the original scheduler.
+# v0.1.x has no detach(); the plugin runs for the engine's lifetime.
 ```
 
 ## Error model
@@ -98,6 +103,7 @@ under `BREAKING CHANGE:` in [`CHANGELOG.md`](https://github.com/angelnicolasc/me
 ## Backends
 
 `EntropyProbe` accepts `backend="cpu"` (default, pure NumPy) or `backend="cuda"`.
-Both backends implement the same mathematical operations; the CUDA backend
-offloads the logit reduction to a dedicated secondary CUDA stream. Tests enforce
-agreement within `atol=1e-5` on a shared set of reference vectors.
+Both backends implement the same mathematical operations and agree within
+`atol=1e-5`. In Sprint 0 the `cuda` backend delegates to the CPU implementation;
+Sprint 1 will wire it to the Rust CUDA kernels in `crates/meridian-kernels/` so
+the logit reduction runs on a dedicated secondary CUDA stream.

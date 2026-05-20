@@ -8,7 +8,7 @@
 | WSL2 | WSL2 on Windows 10/11 | Windows 10 22H2 |
 | Rust toolchain | 1.85.0 | 1.85.0 (pinned) |
 | Python | 3.11 | 3.11 |
-| vLLM | 0.9.0 | 0.21.0 (resolved in `uv.lock`); real-vLLM CI: `Qwen/Qwen2.5-0.5B` |
+| vLLM | 0.9.0 | 0.21.0 (resolved in `uv.lock`) |
 | NVIDIA driver | 555.x | 555.x |
 | CUDA toolkit | 12.6 | 12.6 |
 | CUDA Compute Capability | 8.0 (A100) | 8.0+ |
@@ -62,7 +62,6 @@ Models that are **not** verified to work:
 | `docs` | ubuntu-24.04 | No | Same badge |
 | `supply-chain` | ubuntu-24.04 | No | Same badge |
 | `cuda-build` | self-hosted `gpu` runner | Yes | Runs only on `angelnicolasc` org pushes |
-| `python-gpu` | self-hosted `gpu` runner | Yes | Runs only on `angelnicolasc` org pushes |
 
 The GPU jobs are gated to prevent arbitrary code execution on the self-hosted
 runner from fork PRs. See [GPU CI runner setup](operations/ci-gpu-runner.md).

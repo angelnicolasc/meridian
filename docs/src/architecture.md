@@ -100,9 +100,11 @@ Source: [`crates/meridian-core/src/block_manager.rs`](https://github.com/angelni
 **Inputs**: raw logit vector (fp32, bf16, or fp16) from a completed forward pass.  
 **Outputs**: `EntropySignal` — per-token entropy (nats), EAT value, EAT EMA,
 EAT EMA variance, RPDI local/global ratio.  
-**Hot-path constraint**: runs on a dedicated secondary CUDA stream; must not
-stall the generation stream. The CPU backend (NumPy) is used in tests; the CUDA
-backend is used in production.  
+**Hot-path constraint**: designed to run on a dedicated secondary CUDA stream;
+must not stall the generation stream. In Sprint 0 both paths use the NumPy
+reference; `python/meridian/_backends/cuda.py` defines the CUDA backend
+interface and delegates to CPU until Sprint 1 wires it to the Rust kernels in
+`crates/meridian-kernels/`.  
 **Invariant**: CPU and CUDA backends must agree within `atol=1e-5` on the same
 logit vector. Enforced by `crates/meridian-kernels/tests/kernel_correctness.rs`.  
 **Failure mode**: if the kernel returns `Unavailable`, the system falls back to
@@ -124,13 +126,15 @@ at runtime.
 **Outputs**: reordered batch with output-phase requests drained first; injected
 `</think>` tokens on budget-force events; disagg offload calls on `ExitThink`.  
 **Constraint**: no vLLM fork required. The plugin wraps the existing scheduler
-via attribute delegation and is fully reversible — `detach()` restores the
-original scheduler.  
+via attribute delegation; unknown attributes fall through to the wrapped
+scheduler so vLLM internals work unmodified. `MeridianSchedulerPlugin.attach()`
+is a classmethod that installs the plugin as `engine.scheduler[0]` — no
+separate `detach()` is provided in v0.1.x.  
 **Failure mode**: if the plugin raises during `schedule_batch`, it re-raises
 to the vLLM worker, which surfaces as a serving error for that batch. Errors
 in the disagg offload path are caught and logged; they do not block generation.  
-**Observability**: all Phase Router and Block Manager metrics, plus
-`meridian.disagg.blocks_offloaded` and `meridian.disagg.offload_bytes` when
-disagg is active.
+**Observability**: all Phase Router and Block Manager metrics
+(`meridian.block_manager.*`, `meridian.queue_depth`, `meridian.schedule_batch.*`).
+The `meridian.disagg.*` counter surface is planned for Sprint 1.
 
 Source: [`python/meridian/vllm_plugin.py`](https://github.com/angelnicolasc/meridian/blob/main/python/meridian/vllm_plugin.py).
