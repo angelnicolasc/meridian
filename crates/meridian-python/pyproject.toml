@@ -1,0 +1,28 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "meridian-bindings"
+version = "0.1.0"
+description = "Native pyo3 bindings for meridian-core (built via maturin)."
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "angelnicolasc", email = "nick.dicerutti@gmail.com" }]
+readme = "../README.md"
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[tool.maturin]
+module-name        = "meridian._meridian"
+python-source      = "../python"
+features           = ["pyo3/extension-module"]
+strip              = true
+manifest-path      = "Cargo.toml"

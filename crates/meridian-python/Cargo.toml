@@ -1,0 +1,25 @@
+[package]
+name          = "meridian-python"
+description   = "pyo3 bindings for meridian-core. Built via maturin."
+version       = { workspace = true }
+edition       = { workspace = true }
+rust-version  = { workspace = true }
+license       = { workspace = true }
+authors       = { workspace = true }
+repository    = { workspace = true }
+readme        = { workspace = true }
+keywords      = { workspace = true }
+categories    = { workspace = true }
+
+[lib]
+name       = "_meridian"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+meridian-core = { path = "../meridian-core" }
+pyo3          = { workspace = true }
+serde         = { workspace = true }
+serde_json    = { workspace = true }
+
+[lints]
+workspace = true
