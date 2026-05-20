@@ -1,0 +1,48 @@
+[package]
+name          = "meridian-core"
+description   = "Phase-aware inference-time compute scheduler for reasoning models — core types and the PhaseRouter state machine."
+version       = { workspace = true }
+edition       = { workspace = true }
+rust-version  = { workspace = true }
+license       = { workspace = true }
+authors       = { workspace = true }
+repository    = { workspace = true }
+homepage      = { workspace = true }
+documentation = { workspace = true }
+readme        = { workspace = true }
+keywords      = { workspace = true }
+categories    = { workspace = true }
+
+[lib]
+doctest = true
+
+[dependencies]
+dashmap                     = { workspace = true }
+crossbeam                   = { workspace = true }
+parking_lot                 = { workspace = true }
+ahash                       = { workspace = true }
+thiserror                   = { workspace = true }
+serde                       = { workspace = true }
+toml                        = { workspace = true }
+tracing                     = { workspace = true }
+metrics                     = { workspace = true }
+metrics-exporter-prometheus = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest          = { workspace = true }
+criterion         = { workspace = true }
+rstest            = { workspace = true }
+pretty_assertions = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[features]
+default     = []
+prometheus  = ["dep:metrics-exporter-prometheus"]
+unstable    = []
+
+[[bench]]
+name    = "phase_router"
+harness = false
+
+[lints]
+workspace = true
