@@ -1,8 +1,8 @@
-# Setting up the GPU CI runner
+# GPU CI runner setup
 
 The `cuda.yml` workflow targets a self-hosted runner labelled `gpu` because
-GitHub-hosted runners (as of June 2026) do not provide CUDA-capable GPUs in
-the free tier. This page documents how to provision the runner.
+GitHub-hosted runners do not provide CUDA-capable GPUs in the free tier.
+This page documents how to provision and secure the runner.
 
 ## Hardware requirements
 
@@ -13,6 +13,18 @@ the free tier. This page documents how to provision the runner.
 | CUDA      | 12.6                | 12.6             |
 | Disk      | 80 GiB SSD          | 200 GiB NVMe     |
 | RAM       | 32 GiB              | 64 GiB           |
+
+## Required secrets
+
+| Secret | Where set | Purpose |
+|--------|-----------|---------|
+| *(none required for GPU runner itself)* | — | The runner authenticates via GitHub App token |
+| `RELEASE_PLZ_TOKEN` | Repository secrets | Allows release-plz to push tags |
+| `CARGO_REGISTRY_TOKEN` | Repository secrets | crates.io publish (future) |
+
+The runner registration token is generated once from the GitHub Actions UI and
+is not stored as a persistent secret — it expires after one hour and is only
+used during `./config.sh`.
 
 ## Provisioning
 
@@ -34,16 +46,25 @@ sudo ./svc.sh start
 
 ## Verification
 
-`./run.sh` once interactively; trigger the `cuda.yml` workflow from a PR
-and confirm `nvidia-smi` prints the expected device.
+Run `./run.sh` once interactively. Then trigger the `cuda.yml` workflow from
+a branch and confirm `nvidia-smi` prints the expected device in the job logs.
 
-## Security note
+## Blast radius and fork safety
 
-Self-hosted runners are documented as a footgun on public repositories
-because any PR author can run arbitrary code on them. Meridian mitigates
-this with the workflow gate
-`if: github.repository_owner == 'angelnicolasc'` — PRs from forks do not
-trigger the CUDA job. Maintainers may opt-in per-PR with a `safe-to-test`
-label gate if community contribution volume grows.
+Self-hosted runners execute arbitrary code from the workflow YAML. Meridian
+mitigates this with a hard gate on every GPU job:
 
-See: <https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners#self-hosted-runner-security>.
+```yaml
+if: github.repository_owner == 'angelnicolasc'
+```
+
+PRs from forks never trigger the CUDA workflow. Only pushes and PRs from the
+`angelnicolasc` org are eligible.
+
+**Who can trigger**: repository owners and collaborators with write access.  
+**How to rotate the runner**: generate a new registration token from the
+GitHub Actions UI, run `./config.sh --replace`, restart the service.
+
+See the GitHub documentation on
+[self-hosted runner security](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners#self-hosted-runner-security)
+for a full threat model.

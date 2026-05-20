@@ -40,6 +40,47 @@ Both modes produce identically-shaped artefacts in `--out-dir`:
 See [`benchmarks/metrics.py`](https://github.com/angelnicolasc/meridian/blob/main/benchmarks/metrics.py)
 for the exact serialised shape.
 
+## A/B comparison mode
+
+Pass `--baseline stock` to run the same workload through both Meridian and the
+`StockSchedulerBaseline` — a pure-Python priority-weight single-queue scheduler
+equivalent to vLLM ≤0.8. The report will include a table with columns
+`Stock | Meridian | Δ (%)` and a green/yellow/red indicator per metric.
+
+## Dataset loaders
+
+Pass `--workload sharegpt` or `--workload math500` to load real traffic
+distributions from HuggingFace. Datasets are downloaded once and cached at
+`~/.cache/meridian/datasets/`. Requires no GPU — the offline replay drives the
+synthetic decoder with the real prompt/response length distribution.
+
+## Test environment disclosure
+
+When comparing numbers across runs:
+
+| Parameter | Default |
+|-----------|---------|
+| `--seed` | `42` |
+| `--arrival-rate` | `8 req/s` |
+| `--duration-s` | `30` |
+| `--reasoning-ratio` | `0.4` |
+
+Always report `--seed` and workload flag. Synthetic results are hardware-independent;
+real-vLLM results depend on GPU model, driver, and memory state — disclose all three.
+
+## How to compare two runs
+
+```bash
+# Run A (baseline config)
+python -m benchmarks.meridian_bench synthetic-replay --seed 42 --out-dir bench-out/a/
+
+# Run B (modified config)
+python -m benchmarks.meridian_bench synthetic-replay --seed 42 --out-dir bench-out/b/
+
+# Diff the JSON reports
+diff <(jq -S . bench-out/a/report.json) <(jq -S . bench-out/b/report.json)
+```
+
 ## What this harness is, and what it isn't
 
 - It **is** a phase-differentiated latency regression suite. It catches
@@ -52,6 +93,5 @@ for the exact serialised shape.
   Meridian from the baseline. Operators who want a throughput number
   should run vLLM's benchmark.
 - It **is not** an accuracy benchmark. Budget forcing can in principle
-  hurt reasoning accuracy on hard problems; we measure that separately
-  in [`benchmarks/phase_accuracy_eval.py`](https://github.com/angelnicolasc/meridian/blob/main/benchmarks/README.md)
-  (Sprint 3).
+  hurt reasoning accuracy on hard problems. Accuracy measurement requires a
+  separate ground-truth evaluation suite; this harness does not provide one.

@@ -2,12 +2,16 @@
 
 - [Introduction](introduction.md)
 - [Architecture](architecture.md)
+- [Non-goals](non-goals.md)
+- [Compatibility Matrix](compatibility.md)
+- [Deployment Model](deployment.md)
 
 # Reference
 
 - [API (Rust)](api/rust.md)
 - [API (Python)](api/python.md)
 - [Configuration](configuration.md)
+- [Glossary](glossary.md)
 
 # Architectural Decision Records
 
@@ -25,8 +29,12 @@
 
 - [Metrics](operations/metrics.md)
 - [Troubleshooting](operations/troubleshooting.md)
-- [GPU CI runner setup](operations/ci-gpu-runner.md)
 - [Benchmarks](operations/benchmarks.md)
+- [GPU CI runner setup](operations/ci-gpu-runner.md)
+
+# Security
+
+- [Security & Supply Chain](security.md)
 
 # Contributing
 

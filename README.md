@@ -9,106 +9,164 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](python/pyproject.toml)
 [![CUDA 12.6](https://img.shields.io/badge/CUDA-12.6-76b900.svg)](.devcontainer/Dockerfile)
 [![Release](https://img.shields.io/github/v/release/angelnicolasc/meridian?sort=semver&display_name=tag)](https://github.com/angelnicolasc/meridian/releases)
-[![SLSA Level 2](https://img.shields.io/badge/SLSA-Level_2-success.svg)](docs/src/adr/0007-release-versioning-policy.md)
-
-> Every LLM serving system in 2026 treats thinking tokens identically to output tokens.
-> They are not the same workload. **Meridian is the scheduler that knows the difference.**
+[![SLSA Level 2](https://img.shields.io/badge/SLSA-Level_2-success.svg)](https://github.com/angelnicolasc/meridian/releases)
 
 ---
 
-## The thesis
+## What Meridian is
 
-Reasoning models (DeepSeek-R1, Qwen3, Claude Opus 4.x, o3) produce two structurally
-different token sequences within a single request:
+Meridian is a scheduling layer for vLLM that treats the two token-generation
+phases of reasoning models as distinct workloads. It intercepts the vLLM
+scheduler at runtime — no fork required — and applies separate SLOs,
+eviction policies, and entropy-driven budget control to each phase.
+
+## What problem it solves
+
+Reasoning models (DeepSeek-R1, Qwen3, o3, Granite 3.2) emit two structurally
+different sequences in a single request:
 
 ```
-[prompt] -> <think> ... N reasoning tokens ... </think> -> [output tokens]
+[prompt] → <think> ... N reasoning tokens ... </think> → [output tokens]
 ```
 
-These phases have opposite latency profiles. **Think-decode** is throughput-bound and
-the user does not see inter-token latency. **Output-decode** is the user-visible
-streaming experience and must be protected. No serving system today acts on this
-asymmetry.
+| Phase         | User-visible? | Latency tolerance | Cost profile |
+|---------------|--------------|-------------------|--------------|
+| Think-decode  | No           | High              | Throughput-bound |
+| Output-decode | Yes          | Zero tolerance    | Latency-bound |
 
-Meridian implements:
+Standard continuous-batching schedulers process both phases from the same
+priority queue with the same inter-token latency target. This leaves
+output-phase latency unnecessarily constrained by think-phase batch dynamics.
+Meridian exploits the asymmetry.
 
-1. **Dual-queue scheduling** with phase-differentiated SLOs (TPOT for think, TTOT for output).
-2. **Phase-aware KV block manager** with three-tier eviction (`ThinkComplete` evicted before `OutputCritical`).
-3. **Entropy-driven budget forcing** using EAT (`arXiv:2509.26522`) and RPDI (`arXiv:2603.14251`) signals computed on a dedicated CUDA stream.
-4. **Drop-in vLLM plugin** — no fork required.
+## What is verified today
 
-See [docs/src/architecture.md](docs/src/architecture.md) for the full system
-walk-through and [docs/src/adr/0001-dual-queue-rationale.md](docs/src/adr/0001-dual-queue-rationale.md)
-for the architectural decision record.
+| Component | Verified in CI | Verified on GPU runner |
+|-----------|:--------------:|:----------------------:|
+| `PhaseRouter` state machine | ✓ | — |
+| `MeridianScheduler` dual-queue dispatch | ✓ | — |
+| `PhaseAwareBlockManager` three-tier eviction | ✓ | — |
+| `EntropyProbe` CPU backend (NumPy) | ✓ | — |
+| `EntropyProbe` CUDA backend — correctness vs CPU | — | ✓ |
+| vLLM plugin — attach / detach / reorder / inject | ✓ | ✓ |
+| Disagg block manager surface (`offload_block`, `ingest_block`) | ✓ | — |
+| NIXL fabric wire protocol (synthetic mock) | ✓ | — |
+| Benchmark harness — synthetic A/B | ✓ | — |
+| Benchmark harness — real-vLLM with `Qwen2.5-0.5B` | — | ✓ |
+| SLSA L2 provenance attestation | ✓ (on every `v*` tag) | — |
+| `cargo deny` supply-chain audit | ✓ | — |
 
 ---
 
-## Status
+## What Meridian implements
 
-**v0.1.0 — Sprint 3 (disagg-native)** is the first tagged release.
-Meridian now speaks a versioned wire protocol for prefill-decode
-disaggregation, ships an A/B benchmark harness against a stock
-priority-weight baseline, and loads real ShareGPT / MATH-500 traffic
-from HuggingFace. Provenance is attested at SLSA Level 2 on every
-tagged release per [ADR-0007](docs/src/adr/0007-release-versioning-policy.md).
+```
+Incoming requests
+      │
+      ▼
+ Phase Router  ──── token stream state machine, O(1) per token
+      │
+      ├── ExitThink / ForceBudget ─▶  EAT + RPDI entropy signals
+      │
+      ├── Think-Decode Scheduler  (TPOT-relaxed, 2.5× batch budget)
+      │
+      └── Output-Decode Scheduler (TTOT-strict, stream priority)
+              │
+              ▼
+    Phase-Aware KV Block Manager
+      ThinkComplete ← evicted first
+      ThinkActive
+      OutputCritical ← never evicted without alerting
+```
 
-| Component                        | Status         |
-|----------------------------------|----------------|
-| `PhaseRouter` state machine      | functional     |
-| `EntropyProbe` (CPU backend)     | functional + batch |
-| `EntropyProbe` (CUDA backend)    | functional + correctness-tested |
-| `MeridianScheduler` dispatch     | functional     |
-| `PhaseAwareBlockManager` evict   | functional + pyo3-exposed |
-| `BlockManager` disagg surface    | `offload_block` / `ingest_block` / `block_location` |
-| NIXL fabric (`--features nixl`)  | wire protocol + synthetic in-process fabric |
-| vLLM plugin                      | active (reorders + injects + Duration reap + disagg hooks) |
-| Benchmark harness                | synthetic-replay + real-vllm + A/B against stock baseline |
-| Real dataset loaders             | ShareGPT + MATH-500 (cached locally) |
-| SLSA Level 2 provenance          | attested on every `v*` tag |
+1. **Dual-queue scheduling** — output-phase requests drain the GPU batch
+   before think-phase requests fill remaining capacity. Backed by
+   [`crates/meridian-core/src/scheduler.rs`](crates/meridian-core/src/scheduler.rs).
+
+2. **Phase-aware KV eviction** — three tiers with strict priority ordering.
+   `OutputCritical` eviction fires an observable counter; the target rate is zero.
+   Backed by [`crates/meridian-core/src/block_manager.rs`](crates/meridian-core/src/block_manager.rs).
+
+3. **Entropy-driven budget forcing** — EAT ([arXiv:2509.26522](https://arxiv.org/abs/2509.26522))
+   and RPDI ([arXiv:2603.14251](https://arxiv.org/abs/2603.14251)) signals inject
+   `</think>` when the model signals convergence, not on a static timer. CUDA
+   kernels run on a dedicated secondary stream. Backed by
+   [`crates/meridian-kernels/`](crates/meridian-kernels/) and
+   [`python/meridian/entropy_probe.py`](python/meridian/entropy_probe.py).
+
+4. **Drop-in vLLM plugin** — wraps the existing scheduler via attribute
+   delegation; fully reversible; no vLLM source modification.
+   Backed by [`python/meridian/vllm_plugin.py`](python/meridian/vllm_plugin.py).
+
+5. **Disagg KV transfer** — `offload_block` / `ingest_block` hooks support
+   prefill-decode disaggregation fabrics (NIXL, Mooncake-compatible).
+   Documented in [ADR-0006](docs/src/adr/0006-disagg-kv-transfer.md).
 
 ---
 
 ## Quickstart
 
-Requires a Linux host (or WSL2) with NVIDIA driver 555+ and CUDA 12.6 toolkit.
-Devcontainer support included.
+Requires Linux (or WSL2), Rust 1.85+, Python 3.11+. GPU + CUDA 12.6 for the
+CUDA backend; not required for synthetic benchmarks or unit tests.
 
 ```bash
-# Clone and enter devcontainer
-git clone https://github.com/angelnicolasc/meridian.git && cd meridian
-./scripts/dev-up.sh
+git clone https://github.com/angelnicolasc/meridian.git
+cd meridian
 
-# Build the Rust workspace
-cargo build --workspace
-
-# Build Python bindings
+# Install Python deps and build the native extension.
 uv sync --project python
 maturin develop --release -m crates/meridian-python/Cargo.toml
 
-# Run the test suite (no GPU required)
+# Run all tests (no GPU required).
 cargo nextest run --workspace
-uv run --project python pytest -m "not gpu"
+uv run --project python pytest -m "not gpu and not vllm"
+
+# Run the synthetic A/B benchmark (no GPU, no vLLM).
+uv --project python run python -m benchmarks.meridian_bench synthetic-replay \
+    --baseline stock --duration-s 30 --arrival-rate 8 --out-dir bench-out/
 ```
+
+For CUDA kernel support, append `--cargo-extra-args="--features cuda"` to the
+`maturin develop` call (requires `nvcc` + CUDA 12.6).
 
 ---
 
 ## Repository layout
 
 ```
-crates/meridian-core/    Rust scheduler core (no CUDA, no Python)
-crates/meridian-kernels/ CUDA kernels + Rust FFI
+crates/meridian-core/    Rust scheduler core — no CUDA, no Python dep
+crates/meridian-kernels/ CUDA entropy and EAT kernels + C FFI + NIXL wrappers
 crates/meridian-python/  pyo3 bindings (built via maturin)
-python/meridian/         Python package: EntropyProbe + vLLM plugin
-docs/                    mdbook + ADRs
-models/                  Per-model token boundary configs
-benchmarks/              Replay harness (Sprint 1+)
+python/meridian/         Python package — EntropyProbe, vLLM plugin, config
+docs/                    mdBook documentation + 7 ADRs
+models/                  Per-model token boundary configs (DeepSeek-R1, Qwen3, ...)
+benchmarks/              Replay harness — synthetic + real-vLLM + A/B mode
 ```
+
+---
+
+## Non-goals
+
+Meridian is not a throughput optimiser, accuracy guarantor, or full serving
+engine. See [Non-goals](docs/src/non-goals.md) for explicit scope boundaries.
+
+---
+
+## Evidence
+
+| Artifact | Link |
+|----------|------|
+| CI results | [GitHub Actions](https://github.com/angelnicolasc/meridian/actions) |
+| Release provenance (SLSA L2) | [Releases](https://github.com/angelnicolasc/meridian/releases) |
+| Supply-chain audit | `cargo deny check` in [ci.yml](.github/workflows/ci.yml) |
+| Architecture & ADRs | [docs/src/](docs/src/) |
+| Benchmark methodology | [ADR-0005](docs/src/adr/0005-benchmark-methodology.md) |
 
 ---
 
 ## Contributing
 
-Contributions welcome under [DCO sign-off](CONTRIBUTING.md). Please read
+Contributions welcome under [DCO sign-off](CONTRIBUTING.md). Read
 [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 before opening a PR. Security disclosures: [SECURITY.md](SECURITY.md).
 
