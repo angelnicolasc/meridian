@@ -68,7 +68,7 @@ jobs:
               --reasoning-ratio 0.3 --out-dir bench-out/
         working-directory: ${{ github.workspace }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bench-synthetic-replay
           path: bench-out/
