@@ -1,0 +1,11 @@
+# Code ownership for review routing. See
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-customizations/about-code-owners
+
+*                                @angelnicolasc
+
+# Hot zones requiring extra eyes
+/crates/meridian-core/src/phase_router.rs    @angelnicolasc
+/crates/meridian-kernels/                    @angelnicolasc
+/docs/src/adr/                               @angelnicolasc
+/.github/                                    @angelnicolasc
+/SECURITY.md                                 @angelnicolasc

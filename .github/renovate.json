@@ -1,0 +1,44 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":semanticCommitScopeDisabled",
+    "group:allNonMajor",
+    "schedule:weekly",
+    ":dependencyDashboard"
+  ],
+  "labels": ["dependencies"],
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 5am on monday"]
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["cargo"],
+      "commitMessageTopic": "{{depName}}",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "matchManagers": ["pep621", "pip_requirements"],
+      "commitMessageTopic": "{{depName}}",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "matchPackagePatterns": ["pyo3"],
+      "rangeStrategy": "widen"
+    },
+    {
+      "matchDepTypes": ["devDependencies"],
+      "automerge": true,
+      "automergeType": "branch",
+      "ignoreTests": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"]
+  },
+  "osvVulnerabilityAlerts": true
+}

@@ -1,0 +1,74 @@
+name: CUDA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cuda-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# This workflow targets a self-hosted runner labelled `gpu`. To enable it on
+# your fork, register a runner with these labels and the L4-or-better GPU.
+# See docs/src/operations/ci-gpu-runner.md for setup instructions.
+
+jobs:
+  cuda-build:
+    name: cuda-build + numeric-correctness
+    runs-on: [self-hosted, linux, x64, gpu]
+    if: github.repository_owner == 'angelnicolasc'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify GPU available
+        run: |
+          nvidia-smi
+          nvcc --version
+
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cuda
+
+      - name: Build kernels with CUDA feature
+        run: cargo build -p meridian-kernels --features cuda --release
+
+      - name: Run CUDA correctness tests
+        run: cargo test -p meridian-kernels --features cuda --release -- --include-ignored
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: python/pyproject.toml
+
+      - name: Install Python deps
+        working-directory: python
+        run: uv sync --extra dev
+
+      - name: Build pyo3 extension via maturin
+        run: |
+          uv pip install --system maturin
+          maturin develop --release -m crates/meridian-python/Cargo.toml --strip
+
+      - name: Native bindings integration test
+        working-directory: python
+        run: uv run pytest tests/test_native_bindings.py -v
+
+      - name: Benchmark — synthetic replay (smoke)
+        run: |
+          uv --project python run python -m benchmarks.meridian_bench \
+              synthetic-replay --duration-s 8 --arrival-rate 4 \
+              --reasoning-ratio 0.3 --out-dir bench-out/
+        working-directory: ${{ github.workspace }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench-synthetic-replay
+          path: bench-out/

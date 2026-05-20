@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents:       write
+  pull-requests:  write
+  id-token:       write
+  attestations:   write
+
+jobs:
+  release-plz:
+    name: release-plz
+    runs-on: ubuntu-24.04
+    if: github.repository_owner == 'angelnicolasc' && startsWith(github.ref, 'refs/heads/main')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: MarcoIeni/release-plz-action@v0.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # Tagged release: build artefacts, compute their digests, then call the
+  # SLSA Level 2 generator workflow to attest provenance. Per ADR-0007 we
+  # commit to L2 attestations on every tagged release.
+  # ---------------------------------------------------------------------------
+
+  build-artifacts:
+    name: build-artifacts
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/v')
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install maturin
+        run: pip install --upgrade maturin
+
+      - name: Build Rust release artefacts
+        run: |
+          cargo build --workspace --release
+          mkdir -p artifacts
+          # Stage the static libs and metadata for downstream consumers.
+          find target/release -maxdepth 1 -type f \
+            \( -name '*.rlib' -o -name 'libmeridian*' -o -name 'meridian*' \) \
+            -exec cp {} artifacts/ \;
+
+      - name: Build Python wheel
+        run: |
+          maturin build --release \
+            -m crates/meridian-python/Cargo.toml \
+            -o artifacts/
+
+      - name: Compute artefact digests
+        id: hash
+        run: |
+          cd artifacts
+          digests=$(sha256sum * | base64 -w0)
+          echo "hashes=$digests" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meridian-release-${{ github.ref_name }}
+          path: artifacts/
+          if-no-files-found: error
+
+  provenance:
+    name: slsa-l2-provenance
+    needs: build-artifacts
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      actions:      read
+      id-token:     write
+      contents:     write
+    # Pinned by major to pick up patch-level security fixes without
+    # silently absorbing breaking changes.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: ${{ needs.build-artifacts.outputs.hashes }}
+      upload-assets: true

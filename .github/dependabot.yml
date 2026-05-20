@@ -1,0 +1,11 @@
+# Renovate is the primary dependency-update bot (see .github/renovate.json).
+# Dependabot remains enabled as a security-only fallback so GitHub Security
+# Advisories still trigger PRs even if Renovate is paused.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    labels: ["security", "ci"]

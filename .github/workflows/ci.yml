@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR:   always
+  CARGO_INCREMENTAL:  "0"
+  RUSTFLAGS:          "-Dwarnings"
+  RUST_BACKTRACE:     "1"
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Rust core: fmt + clippy + tests + docs. No CUDA. No Python.
+  # -------------------------------------------------------------------------
+  rust-core:
+    name: rust-core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-core
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy -p meridian-core --all-targets --all-features -- -D warnings
+      - name: nextest
+        uses: taiki-e/install-action@nextest
+      - run: cargo nextest run -p meridian-core --all-features
+      - run: cargo doc -p meridian-core --no-deps --all-features
+
+  # -------------------------------------------------------------------------
+  # CUDA-feature build: ensures the FFI surface compiles against the stub.
+  # Real CUDA compilation is gated to a self-hosted GPU runner not present in
+  # OSS CI — exercised by the `cuda-build` workflow below.
+  # -------------------------------------------------------------------------
+  rust-kernels:
+    name: rust-kernels (stub build)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-kernels
+      - run: cargo build -p meridian-kernels
+      - run: cargo build -p meridian-python
+
+  # -------------------------------------------------------------------------
+  # Python: ruff + mypy + pytest (CPU only). No vLLM, no GPU.
+  # -------------------------------------------------------------------------
+  python:
+    name: python
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: python/pyproject.toml
+      - name: install python toolchain
+        run: uv python install 3.11
+      - name: install deps
+        working-directory: python
+        run: |
+          uv sync --extra dev
+      - name: ruff (meridian + tests + benchmarks)
+        working-directory: python
+        run: uv run ruff check meridian tests ../benchmarks
+      - name: mypy --strict
+        working-directory: python
+        run: uv run mypy --strict --config-file pyproject.toml meridian ../benchmarks
+      - name: pytest (no GPU, no vLLM)
+        working-directory: python
+        run: uv run pytest -m "not gpu and not vllm" --cov=meridian --cov-report=xml
+      - name: benchmark harness unit tests
+        run: uv --project python run pytest benchmarks/tests -q
+        working-directory: ${{ github.workspace }}
+
+  # -------------------------------------------------------------------------
+  # mdbook build — ensures docs render.
+  # -------------------------------------------------------------------------
+  docs:
+    name: docs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: latest
+      - run: mdbook build docs
+
+  # -------------------------------------------------------------------------
+  # Supply-chain: cargo-deny + DCO sign-off.
+  # -------------------------------------------------------------------------
+  supply-chain:
+    name: supply-chain
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: taiki-e/install-action@cargo-deny
+      - run: cargo deny check
