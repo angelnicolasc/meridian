@@ -125,9 +125,8 @@ impl MeridianScheduler {
         // > 1 means we are willing to schedule more think slots per iteration
         // than output, *if* the block budget allows.
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let think_budget_slots = ((output_budget_slots as f32)
-            * self.config.think_batch_multiplier)
-            .floor() as usize;
+        let think_budget_slots =
+            ((output_budget_slots as f32) * self.config.think_batch_multiplier).floor() as usize;
         let think_take = think_budget_slots.min(blocks_left);
         let mut think_slots = Vec::with_capacity(think_take);
         for _ in 0..think_take {
@@ -154,7 +153,7 @@ impl MeridianScheduler {
         self.iteration.fetch_add(1, Ordering::Relaxed);
         debug!(
             output = batch.output_slots.len(),
-            think  = batch.think_slots.len(),
+            think = batch.think_slots.len(),
             "schedule_batch",
         );
         batch
@@ -233,7 +232,6 @@ impl MeridianScheduler {
     fn publish_queue_depths(&self, inner: &Inner) {
         metrics::gauge!(names::QUEUE_DEPTH, "queue" => "output")
             .set(inner.output_queue.len() as f64);
-        metrics::gauge!(names::QUEUE_DEPTH, "queue" => "think")
-            .set(inner.think_queue.len() as f64);
+        metrics::gauge!(names::QUEUE_DEPTH, "queue" => "think").set(inner.think_queue.len() as f64);
     }
 }

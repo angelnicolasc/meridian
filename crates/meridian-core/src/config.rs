@@ -314,9 +314,15 @@ pub struct KvConfig {
     pub capacity_bytes: CapacitySpec,
 }
 
-const fn default_think_fraction() -> f32 { 0.40 }
-const fn default_block_size_bytes() -> u32 { 16_384 }
-const fn default_capacity_spec() -> CapacitySpec { CapacitySpec::Auto }
+const fn default_think_fraction() -> f32 {
+    0.40
+}
+const fn default_block_size_bytes() -> u32 {
+    16_384
+}
+const fn default_capacity_spec() -> CapacitySpec {
+    CapacitySpec::Auto
+}
 
 impl Default for KvConfig {
     fn default() -> Self {

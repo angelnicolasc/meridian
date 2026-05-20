@@ -95,7 +95,9 @@ fn non_reasoning_model_skips_think_phase() {
     assert_eq!(r.on_token(7, NORMAL, None), PhaseEvent::None);
     assert!(matches!(
         r.phase_of(7),
-        Some(ThinkPhase::OutputDecode { think_tokens_used: 0 }),
+        Some(ThinkPhase::OutputDecode {
+            think_tokens_used: 0
+        }),
     ));
 
     for _ in 0..4 {
@@ -119,7 +121,10 @@ fn nested_think_start_is_ignored() {
     assert_eq!(r.on_token(2, THINK_START, None), PhaseEvent::None);
 
     if let Some(ThinkPhase::ThinkDecode { tokens_so_far, .. }) = r.phase_of(2) {
-        assert_eq!(tokens_so_far, 1, "counter must advance through the nested token");
+        assert_eq!(
+            tokens_so_far, 1,
+            "counter must advance through the nested token"
+        );
     } else {
         panic!("expected ThinkDecode, got {:?}", r.phase_of(2));
     }
@@ -174,7 +179,11 @@ fn eat_convergence_triggers_budget_force() {
     let mut forced_at: Option<usize> = None;
     for i in 0..200 {
         if let PhaseEvent::ForceBudget { reason, .. } = r.on_token(4, NORMAL, Some(&stable)) {
-            assert_eq!(reason, BudgetForceReason::Converged, "expected Converged reason");
+            assert_eq!(
+                reason,
+                BudgetForceReason::Converged,
+                "expected Converged reason"
+            );
             forced_at = Some(i);
             break;
         }
@@ -251,7 +260,11 @@ fn force_in_progress_is_idempotent() {
     // ExitThink, not by another normal token).
     for _ in 0..5 {
         let ev = r.on_token(6, NORMAL, None);
-        assert_eq!(ev, PhaseEvent::None, "duplicate ForceBudget emitted: {ev:?}");
+        assert_eq!(
+            ev,
+            PhaseEvent::None,
+            "duplicate ForceBudget emitted: {ev:?}"
+        );
     }
 }
 

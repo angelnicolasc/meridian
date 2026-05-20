@@ -153,7 +153,10 @@ fn allocate_returns_memory_exhausted_when_no_eviction_possible() {
     // capacity, eviction can't bridge the gap.
     let _ = mgr.allocate(1, BlockTier::OutputCritical, 2).unwrap();
     let err = mgr.allocate(2, BlockTier::ThinkActive, 5).unwrap_err();
-    assert!(matches!(err, Error::KvMemoryExhausted { .. }), "got {err:?}");
+    assert!(
+        matches!(err, Error::KvMemoryExhausted { .. }),
+        "got {err:?}"
+    );
 }
 
 #[test]

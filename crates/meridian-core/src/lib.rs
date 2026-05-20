@@ -57,8 +57,8 @@ pub mod types;
 
 pub use crate::block_manager::{BlockManager, PhaseAwareBlockManager};
 pub use crate::config::{
-    CapacitySpec, DisaggConfig, DisaggFabric, EntropyConfig, KvConfig, MeridianConfig,
-    ModelConfig, SchedulerConfig,
+    CapacitySpec, DisaggConfig, DisaggFabric, EntropyConfig, KvConfig, MeridianConfig, ModelConfig,
+    SchedulerConfig,
 };
 pub use crate::error::{Error, Result};
 pub use crate::phase_router::{PhaseRouter, PhaseRouterConfig};

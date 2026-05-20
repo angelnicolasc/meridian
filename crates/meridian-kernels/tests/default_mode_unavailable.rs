@@ -56,8 +56,6 @@ fn launch_eat_returns_unavailable() {
 #[test]
 fn null_pointer_guards_fire_before_ffi() {
     let mut out: f32 = 0.0;
-    let res = unsafe {
-        launch_entropy(core::ptr::null::<c_void>(), 1, Dtype::F32, &raw mut out)
-    };
+    let res = unsafe { launch_entropy(core::ptr::null::<c_void>(), 1, Dtype::F32, &raw mut out) };
     assert!(matches!(res, Err(KernelError::NullPointer(_))));
 }

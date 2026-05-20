@@ -156,16 +156,13 @@ impl PhaseRouter {
     /// `last_touch_ns` is NOT refreshed — use [`Self::touch`] if you want to
     /// extend a request's life under the reaper).
     pub fn register(&self, req_id: u64) {
-        let inserted = self
-            .state
-            .entry(req_id)
-            .or_insert_with(|| {
-                self.tracked.fetch_add(1, Ordering::Relaxed);
-                Entry {
-                    phase: ThinkPhase::Prefill,
-                    last_touch_ns: now_ns(),
-                }
-            });
+        let inserted = self.state.entry(req_id).or_insert_with(|| {
+            self.tracked.fetch_add(1, Ordering::Relaxed);
+            Entry {
+                phase: ThinkPhase::Prefill,
+                last_touch_ns: now_ns(),
+            }
+        });
         drop(inserted);
         self.publish_tracked_gauge();
     }
@@ -307,6 +304,12 @@ impl PhaseRouter {
     /// for _ in 0..3 { let _ = router.on_token(42, 100, None); }
     /// assert_eq!(router.on_token(42, EOS, None), PhaseEvent::Complete);
     /// ```
+    // The state machine is intentionally co-located: each arm wires entropy
+    // signal updates, RPDI accounting, the boundary-token transition, and the
+    // budget-force decision against the *same* mutable `ThinkPhase` borrow.
+    // Splitting it across helpers would force borrow gymnastics for marginal
+    // readability gain; rustfmt's expansion brushes 102 lines, two over.
+    #[allow(clippy::too_many_lines)]
     pub fn on_token(
         &self,
         req_id: u64,
@@ -346,7 +349,9 @@ impl PhaseRouter {
                     // Non-reasoning model path: any non-think token in prefill
                     // means the request is already producing user-visible
                     // output. Skip ThinkDecode entirely.
-                    *entry = ThinkPhase::OutputDecode { think_tokens_used: 0 };
+                    *entry = ThinkPhase::OutputDecode {
+                        think_tokens_used: 0,
+                    };
                     PhaseEvent::None
                 }
             }

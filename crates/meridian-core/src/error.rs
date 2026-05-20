@@ -68,7 +68,9 @@ pub enum Error {
     DisaggUnavailable,
 
     /// A checksum mismatch was detected when ingesting a block from a fabric.
-    #[error("block payload checksum mismatch on ingest (expected {expected:032x}, got {actual:032x})")]
+    #[error(
+        "block payload checksum mismatch on ingest (expected {expected:032x}, got {actual:032x})"
+    )]
     DisaggChecksum {
         /// 128-bit checksum recorded by the producer (truncated Blake3).
         expected: u128,

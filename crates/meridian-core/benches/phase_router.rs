@@ -7,7 +7,7 @@
 //!
 //! Run with: `cargo bench -p meridian-core --bench phase_router`
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use meridian_core::phase_router::{PhaseRouter, PhaseRouterConfig};
 use meridian_core::types::EntropySignal;
 
@@ -58,5 +58,9 @@ fn bench_on_token_with_signal(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_on_token_no_signal, bench_on_token_with_signal);
+criterion_group!(
+    benches,
+    bench_on_token_no_signal,
+    bench_on_token_with_signal
+);
 criterion_main!(benches);

@@ -54,7 +54,11 @@ fn think_batch_multiplier_expands_budget() {
     // output_budget = 2 → think_budget = floor(2 × 2.0) = 4
     let batch = s.schedule_batch(2, 100);
     assert_eq!(batch.output_slots.len(), 0);
-    assert_eq!(batch.think_slots.len(), 4, "multiplier didn't expand think budget");
+    assert_eq!(
+        batch.think_slots.len(),
+        4,
+        "multiplier didn't expand think budget"
+    );
 }
 
 #[test]
@@ -89,7 +93,11 @@ fn complete_clears_request_from_both_queues() {
     s.admit(9);
     // ExitThink moves the request from think_queue → output_queue.
     s.on_phase_event(9, PhaseEvent::ExitThink { tokens_used: 5 });
-    assert_eq!(s.think_queue_depth(), 0, "ExitThink should drain the think slot");
+    assert_eq!(
+        s.think_queue_depth(),
+        0,
+        "ExitThink should drain the think slot"
+    );
     assert_eq!(s.output_queue_depth(), 1);
 
     // Complete clears every remaining slot for this request.

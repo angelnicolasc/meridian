@@ -66,9 +66,7 @@ pub unsafe fn launch_entropy(
     if out_entropy.is_null() {
         return Err(KernelError::NullPointer("out_entropy"));
     }
-    let rc = unsafe {
-        ffi::meridian_entropy_launch(logits, vocab_size, dtype as i32, out_entropy)
-    };
+    let rc = unsafe { ffi::meridian_entropy_launch(logits, vocab_size, dtype as i32, out_entropy) };
     match rc {
         0 => Ok(()),
         -1 => Err(KernelError::Unavailable),

@@ -30,7 +30,11 @@ fn fresh_manager() -> NixlBackedBlockManager {
 
 #[test]
 fn wire_header_is_thirty_two_bytes() {
-    assert_eq!(WireHeader::SIZE, 32, "ADR-0006 commits us to a 32-byte header");
+    assert_eq!(
+        WireHeader::SIZE,
+        32,
+        "ADR-0006 commits us to a 32-byte header"
+    );
 }
 
 #[test]
@@ -54,7 +58,9 @@ fn end_to_end_offload_then_ingest() {
     let _ = mgr.offload_block(ids[0]).expect("offload");
     assert!(matches!(
         mgr.block_location(ids[0]),
-        BlockLocation::Remote { fabric: "nixl-synth" },
+        BlockLocation::Remote {
+            fabric: "nixl-synth"
+        },
     ));
 
     // Untouched blocks must still report local.

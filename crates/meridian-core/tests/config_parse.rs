@@ -43,7 +43,10 @@ supports_think_disable = false
     assert_eq!(cfg.entropy.ema_alpha, 0.05);
     assert_eq!(cfg.kv_memory.think_phase_memory_fraction, 0.40);
 
-    let model = cfg.model.get("deepseek_r1").expect("deepseek model present");
+    let model = cfg
+        .model
+        .get("deepseek_r1")
+        .expect("deepseek model present");
     assert_eq!(model.think_start_token_ids, vec![128_799]);
     assert_eq!(model.think_end_token_ids, vec![128_800]);
     assert_eq!(model.reasoning_parser.as_deref(), Some("deepseek_r1"));

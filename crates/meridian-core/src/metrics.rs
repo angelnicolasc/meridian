@@ -42,8 +42,7 @@ pub mod names {
     pub const OUTPUT_CRITICAL_EVICTION: &str = "meridian.output_critical_eviction";
 
     /// Gauge of tracked requests in the phase router.
-    pub const PHASE_ROUTER_TRACKED_REQUESTS: &str =
-        "meridian.phase_router.tracked_requests";
+    pub const PHASE_ROUTER_TRACKED_REQUESTS: &str = "meridian.phase_router.tracked_requests";
 
     /// Histogram of `schedule_batch` durations (nanoseconds).
     pub const SCHEDULE_BATCH_DURATION_NS: &str = "meridian.schedule_batch.duration_ns";

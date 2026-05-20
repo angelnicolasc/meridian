@@ -6,11 +6,8 @@ import math
 from pathlib import Path
 
 from benchmarks.baselines import StockSchedulerBaseline, run_stock_baseline
-from benchmarks.metrics import ABComparisonReport, BenchmarkReport, aggregate
+from benchmarks.metrics import ABComparisonReport, BenchmarkReport, RequestResult, aggregate
 from benchmarks.workloads import WorkloadRequest, synthetic_mix
-
-
-from benchmarks.metrics import RequestResult
 
 
 def _tiny_workload() -> list[WorkloadRequest]:

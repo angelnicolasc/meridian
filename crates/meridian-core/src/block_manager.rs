@@ -288,8 +288,7 @@ impl BlockManager for PhaseAwareBlockManager {
             for block_id in to_demote {
                 self.remove_from_tier_index(block_id);
                 if let Some(block) = self.blocks.remove(&block_id) {
-                    self.used_bytes =
-                        self.used_bytes.saturating_sub(u64::from(block.size_bytes));
+                    self.used_bytes = self.used_bytes.saturating_sub(u64::from(block.size_bytes));
                     self.free_list.push(block_id);
                     metrics::counter!(
                         names::BLOCK_MANAGER_EVICTIONS,

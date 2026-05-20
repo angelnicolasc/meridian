@@ -19,8 +19,8 @@
 //! the protocol.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use meridian_core::block_manager::{BlockManager, PhaseAwareBlockManager};
 use meridian_core::error::{Error, Result};
@@ -418,14 +418,14 @@ mod tests {
     #[test]
     fn offload_then_ingest_round_trip() {
         let mut m = mgr();
-        let ids = m
-            .allocate(42, BlockTier::ThinkActive, 1)
-            .expect("allocate");
+        let ids = m.allocate(42, BlockTier::ThinkActive, 1).expect("allocate");
         let id = ids[0];
         let _ = m.offload_block(id).expect("offload");
         assert!(matches!(
             m.block_location(id),
-            BlockLocation::Remote { fabric: "nixl-synth" },
+            BlockLocation::Remote {
+                fabric: "nixl-synth"
+            },
         ));
 
         // Build a wire-format payload that ingest_block can validate.
