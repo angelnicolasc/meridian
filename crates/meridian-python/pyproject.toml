@@ -9,7 +9,7 @@ description = "Native pyo3 bindings for meridian-core (built via maturin)."
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [{ name = "angelnicolasc", email = "nick.dicerutti@gmail.com" }]
-readme = "../README.md"
+readme = "../../README.md"
 classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Rust",
