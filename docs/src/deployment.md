@@ -17,7 +17,7 @@ one Meridian plugin, all on the same GPU node.
 └──────────────────────────────────────────────┘
 ```
 
-**Prerequisites**: Linux (or WSL2), NVIDIA driver 555+, CUDA 12.6, vLLM 0.4.x.
+**Prerequisites**: Linux (or WSL2), NVIDIA driver 555+, CUDA 12.6, vLLM ≥ 0.9.0 (`pip install "meridian[vllm]"` resolves to 0.21.0 via `uv.lock`).
 
 **Configuration**: standard `meridian.toml` with `[disagg] enabled = false`.
 
@@ -98,5 +98,5 @@ plugin = MeridianSchedulerPlugin(scheduler=engine.scheduler, config=cfg)
 |-----------|-------|-------|
 | Models per instance | 1 | One engine, one config |
 | Concurrent requests | Limited by GPU VRAM / block budget | Set `capacity_bytes` |
-| vLLM version | 0.4.x verified | 0.5+ compatibility not tested |
+| vLLM version | ≥ 0.9.0 (pinned: 0.21.0 in `uv.lock`) | Earlier versions not supported |
 | Disagg fabric | NIXL (production) or synthetic mock | Real NIXL requires libnixl |

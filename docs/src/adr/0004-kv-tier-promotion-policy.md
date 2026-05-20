@@ -1,9 +1,9 @@
 # ADR-0004: KV tier promotion is one-way; demotion is the only direction
 
 - **Status**: Accepted
-- **Date**: 2026-05-21
+- **Date**: 2026-05-20
 - **Authors**: angelnicolasc
-- **Reviewers**: Sprint 1 review
+- **Reviewers**: sole-maintainer decision record
 
 ## Context
 

@@ -1,9 +1,9 @@
 # ADR-0003: `DashMap` for per-request phase state
 
 - **Status**: Accepted
-- **Date**: 2026-05-21
+- **Date**: 2026-05-20
 - **Authors**: angelnicolasc
-- **Reviewers**: Sprint 1 review
+- **Reviewers**: sole-maintainer decision record
 
 ## Context
 
@@ -83,5 +83,5 @@ Comparable to `papaya` but more API surface; same deferral rationale.
 ## References
 
 - DashMap source: <https://github.com/xacrimon/dashmap>.
-- Sprint 0 [bench](https://github.com/angelnicolasc/meridian/blob/main/crates/meridian-core/benches/phase_router.rs)
+- The [phase_router bench](https://github.com/angelnicolasc/meridian/blob/main/crates/meridian-core/benches/phase_router.rs)
   measures the steady-state cost of `on_token` under no contention.

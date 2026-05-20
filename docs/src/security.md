@@ -74,9 +74,12 @@ All CI workflows run with minimal permissions:
 | Workflow | Permissions |
 |----------|-------------|
 | `ci.yml` | `contents: read` |
-| `release.yml` | `contents: write`, `id-token: write` (for SLSA) |
+| `release.yml` | `contents: write`, `pull-requests: write`, `id-token: write`, `attestations: write` |
+| `sbom.yml` | `contents: write` |
+| `docs.yml` | `contents: read`, `pages: write`, `id-token: write` |
 | `cuda.yml` | `contents: read` |
 
-The `id-token: write` permission in `release.yml` is required by
-`slsa-github-generator` to mint the OIDC-backed provenance token. It is
-scoped only to the `build-artifacts` and `provenance` jobs.
+**`release.yml` permission notes:**
+- `id-token: write` — required by `slsa-github-generator` to mint the OIDC-backed provenance token; scoped to the `build-artifacts` and `provenance` jobs.
+- `pull-requests: write` — required by `release-plz` to open the automated release PR.
+- `attestations: write` — required by `slsa-github-generator` to upload the attestation bundle as a release asset.

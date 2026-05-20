@@ -1,18 +1,18 @@
 # ADR-0006: Disaggregated KV transfer protocol
 
 - **Status**: Accepted
-- **Date**: 2026-05-23
+- **Date**: 2026-05-20
 - **Authors**: angelnicolasc
-- **Reviewers**: angelnicolasc
+- **Reviewers**: sole-maintainer decision record
 
 ## Context
 
-The 2026 frontier of LLM serving infrastructure has settled on
+The current frontier of LLM serving infrastructure has settled on
 *prefill-decode disaggregation*: prompt-processing (compute-bound) and
 token-decoding (memory-bandwidth-bound) run on separate worker pools and
-exchange KV blocks across a high-bandwidth fabric. NVIDIA NIXL (June
-2026) is the CUDA-blessed reference; Mooncake (Moonshot, ASPLOS '25) is
-the open-source protocol that the rest of the ecosystem implements.
+exchange KV blocks across a high-bandwidth fabric. NVIDIA NIXL is the
+CUDA-blessed reference; Mooncake (Moonshot, ASPLOS '25) is the
+open-source protocol that the rest of the ecosystem implements.
 
 Meridian's three-tier block manager already produces the exact signal a
 disaggregated pool wants — `ThinkComplete` blocks at `ExitThink` are
@@ -80,8 +80,9 @@ treats it as a raw KV slab; Mooncake adds its own framing inside.
 - **`OutputCritical` allocation pressure** — if the local pool is
   thrashing `OutputCritical` (a user-visible degradation event), the
   scheduler may pull blocks back from the fabric to satisfy
-  allocations. Sprint 3 ships the hook; the pull policy is scheduled
-  for Sprint 4 once we have a measured offload latency budget.
+  allocations. The `ingest_block` hook is implemented; the automatic
+  pull policy under allocation pressure is deferred pending measured
+  offload latency data to calibrate the threshold.
 
 ### Fabric trait
 
@@ -93,7 +94,7 @@ pub trait Fabric: Send + Sync + std::fmt::Debug {
 }
 ```
 
-Implementations Sprint 3 ships:
+Shipped implementations:
 
 - `SyntheticNixlFabric` — in-process keyed map, wire-format-identical
   to a real NIXL agent on the host side. Used for integration tests

@@ -3,7 +3,7 @@
 - **Status**: Accepted
 - **Date**: 2026-05-20
 - **Authors**: angelnicolasc
-- **Reviewers**: Sprint 0 review
+- **Reviewers**: sole-maintainer decision record
 
 ## Context
 

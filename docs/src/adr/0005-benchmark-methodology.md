@@ -1,9 +1,9 @@
 # ADR-0005: Benchmark methodology and metric selection
 
 - **Status**: Accepted
-- **Date**: 2026-05-22
+- **Date**: 2026-05-20
 - **Authors**: angelnicolasc
-- **Reviewers**: Sprint 2 review
+- **Reviewers**: sole-maintainer decision record
 
 ## Context
 
@@ -102,13 +102,14 @@ form can be posted as a PR comment for visual diff.
   default sleeps (6 µs / 18 µs for think / output) are approximations
   of bf16-Qwen3-on-H100 wall-clock times. Operators tuning a different
   hardware target should override via the `SyntheticDecoder` constructor.
-- **Mix is synthetic.** Real ShareGPT / MATH-500 replays land in
-  Sprint 3 when we wire up the dataset loaders.
+- **Mix is synthetic.** Real ShareGPT / MATH-500 replays are
+  available via `--workload sharegpt|math500` and use the offline
+  HuggingFace dataset loader; they do not require a GPU.
 
 ### Neutral
 
-- Report artefacts are JSON + Markdown only. No HTML dashboards in
-  Sprint 2 — operators who want one can render the JSON externally.
+- Report artefacts are JSON + Markdown only. Operators who want an
+  HTML dashboard can render the JSON externally.
 
 ## Alternatives considered
 
@@ -122,10 +123,10 @@ abstractions.
 
 ### MLPerf-style reference workloads
 
-Considered, deferred. MLPerf has well-defined LLM benchmark scenarios
-but they target raw throughput and aggregate latency at the API level,
-not phase-differentiated metrics. We can register a MLPerf-compatible
-mode in Sprint 3 if there is portfolio demand.
+Considered, deferred. MLPerf targets raw throughput and aggregate API-level
+latency, not phase-differentiated metrics. A MLPerf-compatible reporting mode
+could be added if there is downstream demand, but it does not fit the primary
+signal Meridian optimises for.
 
 ### Per-token wall-clock tracing
 

@@ -1,9 +1,9 @@
 # ADR-0007: Release and versioning policy
 
 - **Status**: Accepted
-- **Date**: 2026-05-23
+- **Date**: 2026-05-20
 - **Authors**: angelnicolasc
-- **Reviewers**: angelnicolasc
+- **Reviewers**: sole-maintainer decision record
 
 ## Context
 
@@ -77,11 +77,15 @@ release with a partial set is a CI failure, not a partial release.
 
 ### Version coupling
 
-`meridian-core::VERSION`, `meridian-kernels` Cargo version,
-`meridian` Python package version, and the mdBook footer version are
-identical. `release-plz` enforces this via workspace inheritance for
-the Rust side; the Python `pyproject.toml` reads the workspace version
-via a build hook. Bumping the workspace bumps everything.
+The **policy** is that `meridian-core`, `meridian-kernels`, and the `meridian`
+Python package carry the same version string. `release-plz` enforces this for
+the Rust side via Cargo workspace inheritance.
+
+**Current state of automation as of v0.1.0**: `python/pyproject.toml` carries
+a hardcoded `version = "0.1.0"` that must be bumped manually in sync with the
+Cargo workspace. A build hook to read the workspace version automatically is
+planned but not yet wired. Operators upgrading the Rust workspace must also
+update `python/pyproject.toml` until that hook is in place.
 
 ### Yanking
 

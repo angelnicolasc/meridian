@@ -8,7 +8,7 @@
 | WSL2 | WSL2 on Windows 10/11 | Windows 10 22H2 |
 | Rust toolchain | 1.85.0 | 1.85.0 (pinned) |
 | Python | 3.11 | 3.11 |
-| vLLM | 0.4.x | 0.4.x (synthetic mode); real-vLLM CI: `Qwen/Qwen2.5-0.5B` |
+| vLLM | 0.9.0 | 0.21.0 (resolved in `uv.lock`); real-vLLM CI: `Qwen/Qwen2.5-0.5B` |
 | NVIDIA driver | 555.x | 555.x |
 | CUDA toolkit | 12.6 | 12.6 |
 | CUDA Compute Capability | 8.0 (A100) | 8.0+ |
@@ -69,8 +69,8 @@ runner from fork PRs. See [GPU CI runner setup](operations/ci-gpu-runner.md).
 
 ## Known incompatibilities
 
-- **vLLM 0.5+**: the vLLM scheduler interface changed in 0.5. Plugin compatibility
-  with vLLM ≥0.5 has not been verified. Track [issue tracker](https://github.com/angelnicolasc/meridian/issues) for updates.
+- **vLLM below 0.9.0**: the dependency constraint is `vllm>=0.9.0`. Earlier
+  versions are not supported and will be rejected at install time.
 - **Windows (native)**: the Rust workspace builds on Windows (tested in development),
   but the Python extension and benchmarks require Linux or WSL2 for the CUDA and
   maturin paths.
