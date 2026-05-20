@@ -127,4 +127,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@1.85.0
       - uses: taiki-e/install-action@cargo-deny
+      - name: Update pyo3 to patched version
+        run: cargo update -p pyo3
       - run: cargo deny check

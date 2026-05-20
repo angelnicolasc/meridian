@@ -17,14 +17,31 @@ jobs:
     runs-on: ubuntu-24.04
     if: github.repository_owner == 'angelnicolasc' && startsWith(github.ref, 'refs/heads/main')
     steps:
+      - name: Check release token availability
+        id: token
+        env:
+          TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: |
+          if [ -n "$TOKEN" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::RELEASE_PLZ_TOKEN is not configured — release-plz PR creation skipped. Add a PAT with repo + pull_request scopes as RELEASE_PLZ_TOKEN to enable."
+          fi
+
       - uses: actions/checkout@v6
+        if: steps.token.outputs.available == 'true'
         with:
           fetch-depth: 0
-          token: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+
       - uses: dtolnay/rust-toolchain@1.85.0
+        if: steps.token.outputs.available == 'true'
+
       - uses: MarcoIeni/release-plz-action@v0.5
+        if: steps.token.outputs.available == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   # ---------------------------------------------------------------------------

@@ -52,7 +52,7 @@ cmake    = "0.1"
 bindgen  = "0.71"
 
 # Python bindings
-pyo3 = { version = "0.23", features = ["abi3-py311", "extension-module"] }
+pyo3 = { version = "0.24", features = ["abi3-py311", "extension-module"] }
 
 # Testing
 proptest    = "1.6"
