@@ -13,7 +13,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - name: Install Rust 1.85.0
+        run: |
+          rustup toolchain install 1.85.0 --profile minimal --no-self-update
+          rustup default 1.85.0
       - uses: astral-sh/setup-uv@v7
 
       - name: install cargo-cyclonedx

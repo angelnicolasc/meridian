@@ -33,9 +33,11 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@1.85.0
-        with:
-          components: rustfmt, clippy
+      - name: Install Rust 1.85.0
+        run: |
+          rustup toolchain install 1.85.0 --profile minimal --no-self-update \
+            --component rustfmt --component clippy
+          rustup default 1.85.0
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: rust-core
@@ -61,7 +63,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - name: Install Rust 1.85.0
+        run: |
+          rustup toolchain install 1.85.0 --profile minimal --no-self-update
+          rustup default 1.85.0
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: rust-kernels
@@ -125,7 +130,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - name: Install Rust 1.85.0
+        run: |
+          rustup toolchain install 1.85.0 --profile minimal --no-self-update
+          rustup default 1.85.0
       - uses: taiki-e/install-action@cargo-deny
       - name: Update pyo3 to patched version
         run: cargo update -p pyo3

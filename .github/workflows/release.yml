@@ -35,8 +35,11 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
 
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - name: Install Rust 1.85.0
         if: steps.token.outputs.available == 'true'
+        run: |
+          rustup toolchain install 1.85.0 --profile minimal --no-self-update
+          rustup default 1.85.0
 
       - uses: MarcoIeni/release-plz-action@v0.5
         if: steps.token.outputs.available == 'true'
