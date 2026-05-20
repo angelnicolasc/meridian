@@ -1,0 +1,45 @@
+[package]
+name          = "meridian-kernels"
+description   = "CUDA kernels and FFI bindings for the Meridian entropy probe."
+version       = { workspace = true }
+edition       = { workspace = true }
+rust-version  = { workspace = true }
+license       = { workspace = true }
+authors       = { workspace = true }
+repository    = { workspace = true }
+readme        = { workspace = true }
+keywords      = { workspace = true }
+categories    = { workspace = true }
+# `links` is only set under the cuda feature to claim the native library
+# uniquely; without it, the Rust stubs provide every symbol locally.
+
+[features]
+# CUDA build is opt-in. CI default has no CUDA and exercises the safe stub.
+default = []
+cuda    = []
+# Disaggregated KV transfer. The `nixl` feature compiles the safe wrapper
+# layer; when `nvidia-nixl-sys` is published the dependency is enabled
+# transitively. Today this provides a wire-protocol-compatible synthetic
+# fabric (see ADR-0006 §Risks) so the integration surface is exercised
+# end-to-end without a libnixl runtime.
+nixl    = ["dep:blake3"]
+
+[dependencies]
+thiserror = { workspace = true }
+tracing   = { workspace = true }
+meridian-core = { path = "../meridian-core" }
+blake3        = { version = "1.5", optional = true }
+
+[dev-dependencies]
+# cudarc gives a safe handle on cudaMalloc/cudaMemcpy for the kernel
+# correctness test, without forcing the main crate to depend on a Rust CUDA
+# binding. Pinned to a version that supports CUDA 12.x.
+cudarc = { version = "0.12", optional = false, default-features = false, features = ["cuda-12060"] }
+
+[build-dependencies]
+# Only needed when building with `--features cuda`. Cargo will still pull
+# them by default unfortunately; the build.rs simply doesn't invoke them.
+cmake = { workspace = true }
+
+[lints]
+workspace = true
