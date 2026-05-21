@@ -41,9 +41,12 @@ pub fn otlp_tracer_provider(
                 .http()
                 .with_endpoint(endpoint),
         )
-        .with_trace_config(Config::default().with_resource(Resource::new(vec![
-            KeyValue::new("service.name", service_name.to_string()),
-        ])))
+        .with_trace_config(
+            Config::default().with_resource(Resource::new(vec![KeyValue::new(
+                "service.name",
+                service_name.to_string(),
+            )])),
+        )
         .install_simple()?;
     Ok(provider)
 }

@@ -34,8 +34,7 @@ fn op_strategy() -> impl Strategy<Value = Op> {
         (0u64..6).prop_map(|req| Op::Free { req }),
         (0usize..40).prop_map(|idx| Op::FreeById { idx }),
         (0u64..6).prop_map(|req| Op::Demote { req }),
-        (0u64..(CAPACITY_BLOCKS * u64::from(BLOCK_BYTES)))
-            .prop_map(|bytes| Op::EvictFor { bytes }),
+        (0u64..(CAPACITY_BLOCKS * u64::from(BLOCK_BYTES))).prop_map(|bytes| Op::EvictFor { bytes }),
     ]
 }
 

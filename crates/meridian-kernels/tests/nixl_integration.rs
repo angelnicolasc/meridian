@@ -137,7 +137,9 @@ fn offload_reclaims_the_local_slot() {
     assert!(!mgr.local().is_resident(ids[0]));
     assert!(matches!(
         mgr.block_location(ids[0]),
-        BlockLocation::Remote { fabric: "nixl-synth" },
+        BlockLocation::Remote {
+            fabric: "nixl-synth"
+        },
     ));
 }
 
@@ -160,7 +162,10 @@ fn reused_slot_reports_local_again() {
         .allocate(2, BlockTier::OutputCritical, 1)
         .expect("reuse slot");
     assert_eq!(reused, vec![offloaded]);
-    assert!(matches!(mgr.block_location(offloaded), BlockLocation::Local));
+    assert!(matches!(
+        mgr.block_location(offloaded),
+        BlockLocation::Local
+    ));
 }
 
 #[test]
@@ -206,10 +211,10 @@ fn mooncake_adapter_round_trips_the_meridian_payload() {
 
 #[test]
 fn block_manager_offloads_over_mooncake_fabric() {
-    let mut mgr =
-        NixlBackedBlockManager::new(fresh_local(), Arc::new(MooncakeAdapter::new(Arc::new(
-            SyntheticNixlFabric::new(),
-        ))));
+    let mut mgr = NixlBackedBlockManager::new(
+        fresh_local(),
+        Arc::new(MooncakeAdapter::new(Arc::new(SyntheticNixlFabric::new()))),
+    );
     let ids = mgr
         .allocate(1, BlockTier::ThinkComplete, 2)
         .expect("allocate");
