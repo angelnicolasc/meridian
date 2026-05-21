@@ -39,6 +39,48 @@ Incoming requests
                     (decode kernel, KV store)
 ```
 
+## Phase state machine
+
+The Phase Router advances each request through this machine on every decoded
+token. `ForceBudget` is emitted as a side effect (the request stays in
+`ThinkDecode` until `</think>` is observed or injected).
+
+```mermaid
+stateDiagram-v2
+    [*] --> Prefill
+    Prefill --> ThinkDecode: think_start id  /  EnterThink
+    ThinkDecode --> ThinkDecode: token  /  update EAT + RPDI
+    ThinkDecode --> ThinkDecode: converged or overthinking  /  ForceBudget
+    ThinkDecode --> OutputDecode: think_end id  /  ExitThink
+    OutputDecode --> Complete: eos id  /  Complete
+    Complete --> [*]
+```
+
+## Disaggregated offload sequence
+
+When a fabric is configured, `ExitThink` triggers a batched offload of the
+request's think-complete blocks. Each offloaded block is framed, pushed to the
+fabric, and its local slot is reclaimed (see [ADR-0006](adr/0006-disagg-kv-transfer.md)).
+
+```mermaid
+sequenceDiagram
+    participant R as PhaseRouter
+    participant S as Scheduler / Plugin
+    participant B as BlockManager
+    participant F as Fabric (NIXL / Mooncake)
+    R->>S: ExitThink(req, tokens_used)
+    S->>B: demote_think_blocks(req)
+    S->>B: blocks_for_request(req)
+    B-->>S: [block_ids]
+    loop batched at offload_threshold_blocks
+        S->>B: offload_block(id)
+        B->>F: push(encode(tier, body))
+        F-->>B: handle
+        B->>B: free_block_by_id(id)
+    end
+    Note over S,F: meridian_disagg_blocks_offloaded_total += n
+```
+
 ## Components
 
 ### Phase Router
@@ -134,7 +176,8 @@ separate `detach()` is provided in v0.1.x.
 to the vLLM worker, which surfaces as a serving error for that batch. Errors
 in the disagg offload path are caught and logged; they do not block generation.  
 **Observability**: all Phase Router and Block Manager metrics
-(`meridian.block_manager.*`, `meridian.queue_depth`, `meridian.schedule_batch.*`).
-The `meridian.disagg.*` counter surface is planned for Sprint 1.
+(`meridian.block_manager.*`, `meridian.queue_depth`, `meridian.schedule_batch.*`),
+plus `meridian_disagg_blocks_offloaded_total` and `meridian_vocab_fallback_total`
+emitted by the plugin (Prometheus, and OTLP when `[telemetry]` is enabled).
 
 Source: [`python/meridian/vllm_plugin.py`](https://github.com/angelnicolasc/meridian/blob/main/python/meridian/vllm_plugin.py).

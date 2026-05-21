@@ -162,7 +162,7 @@ your alerting stack.
 
 ---
 
-### `meridian.disagg.blocks_offloaded{fabric=...}` *(planned — not yet emitted in v0.1.x)*
+### `meridian_disagg_blocks_offloaded_total{fabric=...}`
 
 | Property | Value |
 |----------|-------|
@@ -170,23 +170,30 @@ your alerting stack.
 | Unit | blocks |
 | Labels | `fabric` ∈ `{nixl, mooncake}` |
 | Cardinality | 1 series per active fabric |
-| Source | `MeridianSchedulerPlugin` on `ExitThink` |
+| Source | `MeridianSchedulerPlugin` on `ExitThink` (flushed at `offload_threshold_blocks`) |
 | Why | Tracks disagg throughput. A counter that never moves when disagg is enabled means offload hooks are not firing. |
 
 ---
 
-### `meridian.disagg.offload_bytes{fabric=...}` *(planned — not yet emitted in v0.1.x)*
+### `meridian_vocab_fallback_total`
 
 | Property | Value |
 |----------|-------|
-| Type | histogram |
-| Unit | bytes per offload batch |
-| Labels | `fabric` |
-| Cardinality | 1 series per active fabric |
-| Source | `MeridianSchedulerPlugin` |
-| Why | Tracks offload batch size distribution. Consistently small batches indicate `offload_threshold_blocks` is set too low and transfer overhead is not being amortised. |
+| Type | counter |
+| Unit | events |
+| Cardinality | 1 series |
+| Source | `MeridianSchedulerPlugin` entropy-probe batch path |
+| Why | Counts batches where logit rows had heterogeneous vocab sizes and the probe fell back to per-request compute. A rising counter means mixed-model batching is defeating the batched probe; investigate request routing. |
 
 ---
+
+## OTLP export
+
+Prometheus is the primary metric surface. When `[telemetry] otlp_enabled = true`
+(requires the `otel` extra), the plugin additionally exports its counters to an
+OTLP/HTTP collector at `[telemetry] otlp_endpoint`, and the Rust core can wire
+its `tracing` spans to OTLP via the `otel` crate feature
+(`meridian_core::telemetry::install`). Both are off by default.
 
 ## Trace spans
 

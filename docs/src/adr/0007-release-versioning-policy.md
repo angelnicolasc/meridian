@@ -66,11 +66,15 @@ Every tagged release ships:
   otherwise.
 - mdBook deploy → GitHub Pages (via `docs.yml` on push to `main`).
 
-> **Note on crates.io and PyPI publishing**: automated `cargo publish` and
-> PyPI upload are designed into this policy but not yet wired into the
-> `release.yml` workflow as of v0.1.0. They require `CARGO_REGISTRY_TOKEN`
-> and PyPI trusted publishing to be configured in the repo secrets.
-> Track progress in the issue tracker.
+> **Note on crates.io and PyPI publishing**: `release.yml` carries a manual
+> (`workflow_dispatch`) `publish` job. It defaults to **dry-run** —
+> `cargo publish --dry-run` for the crates plus `twine check` on the wheel —
+> so packaging is validated on every invocation without pushing anything.
+> Selecting `publish_mode = live` performs the real publish, but each live
+> step is token-gated: it runs only when `CARGO_REGISTRY_TOKEN` (crates.io)
+> and `PYPI_API_TOKEN` (PyPI) are present in repo secrets. Until those are
+> configured the job is safe to run and simply validates. This keeps publish
+> off the automatic tag path while the project stabilises pre-1.0.
 
 The three artefacts (crates, wheel, mdBook) move *together*. A
 release with a partial set is a CI failure, not a partial release.

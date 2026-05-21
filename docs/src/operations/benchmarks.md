@@ -42,10 +42,33 @@ for the exact serialised shape.
 
 ## A/B comparison mode
 
-Pass `--baseline stock` to run the same workload through both Meridian and the
-`StockSchedulerBaseline` — a pure-Python priority-weight single-queue scheduler
-equivalent to vLLM ≤0.8. The report will include a table with columns
-`Stock | Meridian | Δ (%)` and a green/yellow/red indicator per metric.
+`--baseline` runs the same workload through one or more baseline schedulers
+alongside Meridian and writes `ab-report.{json,md}` to `--out-dir`:
+
+- `stock` — `StockSchedulerBaseline`, a priority-weight single-queue scheduler
+  equivalent to vLLM ≤0.8 (no phase awareness, never forces budget).
+- `static-budget` — `StaticBudgetBaseline`, a fixed think-token cap equivalent
+  to vLLM 0.9's `thinking_token_budget` (forces `</think>` on a counter, with no
+  entropy signal). This is the prior art Meridian's EAT/RPDI forcing aims to beat.
+- `all` — run every baseline; the report gets one value column per run and a
+  `Δ% vs <baseline>` column per baseline with a `WIN/win/FLAT/loss/LOSS` flag.
+
+### Five-minute A/B (no GPU)
+
+```bash
+# Stock + static-budget + Meridian over a real prompt-length distribution.
+python -m benchmarks.meridian_bench synthetic-replay \
+    --workload sharegpt --baseline all \
+    --duration-s 30 --arrival-rate 8 --out-dir bench-out/
+
+# Read the comparison. Meridian should win TTOT P95 vs both baselines.
+cat bench-out/ab-report.md
+```
+
+The synthetic-replay mode requires the native extension
+(`maturin develop -m crates/meridian-python/Cargo.toml`); the baseline and
+report logic alone are exercised by `benchmarks/tests/test_baselines.py`
+without it.
 
 ## Dataset loaders
 
