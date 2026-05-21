@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish_mode:
+        description: "Registry publish mode"
+        type: choice
+        default: dry-run
+        options:
+          - dry-run
+          - live
 
 permissions:
   contents:       write
@@ -100,6 +109,65 @@ jobs:
           name: meridian-release-${{ github.ref_name }}
           path: artifacts/
           if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Registry publish. Manual-only (workflow_dispatch). Defaults to dry-run:
+  # it validates that the crates package and the wheel's metadata is correct
+  # without pushing anything. Selecting `live` performs the real publish, and
+  # only the steps whose tokens are present run — so the job is safe to invoke
+  # before crates.io / PyPI credentials are configured.
+  #
+  # To enable live publishing, configure repo secrets `CARGO_REGISTRY_TOKEN`
+  # (crates.io) and `PYPI_API_TOKEN` (PyPI), then run this workflow with
+  # publish_mode = live. See ADR-0007.
+  # ---------------------------------------------------------------------------
+  publish:
+    name: publish (${{ inputs.publish_mode }})
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'workflow_dispatch'
+    # Job-level env so the token-presence checks are visible in step `if:`
+    # conditions (step-level env is not).
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Install Rust 1.85.0
+        run: |
+          rustup toolchain install 1.85.0 --profile minimal --no-self-update
+          rustup default 1.85.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install maturin and twine
+        run: pip install --upgrade maturin twine
+
+      # --- Dry-run validation (always) -------------------------------------
+      - name: cargo publish dry-run (meridian-core)
+        run: cargo publish --dry-run -p meridian-core
+      - name: cargo package check (meridian-kernels)
+        # --no-verify skips the build step, which would otherwise require
+        # meridian-core to already be on crates.io.
+        run: cargo publish --dry-run --no-verify -p meridian-kernels
+      - name: Build wheel and validate metadata
+        run: |
+          maturin build --release -m crates/meridian-python/Cargo.toml -o dist/
+          twine check dist/*.whl
+
+      # --- Live publish (manual `live` mode, token-gated) ------------------
+      - name: cargo publish (live)
+        if: inputs.publish_mode == 'live' && env.CARGO_REGISTRY_TOKEN != ''
+        run: |
+          cargo publish -p meridian-core
+          cargo publish -p meridian-kernels
+      - name: PyPI publish (live)
+        if: inputs.publish_mode == 'live' && env.PYPI_API_TOKEN != ''
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ env.PYPI_API_TOKEN }}
+        run: twine upload dist/*.whl
 
   provenance:
     name: slsa-l2-provenance

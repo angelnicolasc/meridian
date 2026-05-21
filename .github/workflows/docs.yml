@@ -30,9 +30,18 @@ jobs:
         with:
           mdbook-version: latest
 
+      - name: Install mdbook-mermaid
+        run: cargo install mdbook-mermaid --locked
+
+      - name: Wire mermaid assets
+        # Adds the `mermaid` preprocessor and copies mermaid.min.js +
+        # mermaid-init.js into docs/. Idempotent; runs before the build so the
+        # diagrams render in the published site.
+        run: mdbook-mermaid install docs
+
       - name: rustdoc
         run: |
-          cargo doc --workspace --no-deps --features prometheus,unstable,nixl
+          cargo doc --workspace --no-deps --features prometheus,unstable,nixl,otel
           echo '<meta http-equiv="refresh" content="0; url=meridian_core/">' > target/doc/index.html
 
       - name: mdbook build
