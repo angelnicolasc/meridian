@@ -88,3 +88,21 @@ def test_meridian_scheduler_pending_injection() -> None:
     pi = s.pop_pending_injection()
     assert pi == {"req_id": 7, "token_id": 128_800}
     assert s.pop_pending_injection() is None
+
+
+def test_block_manager_enumerate_and_free_by_id() -> None:
+    # 16-byte blocks, capacity for 8 — keeps the arithmetic obvious.
+    bm = native.BlockManager(16, 8 * 16)
+    ids = bm.allocate(1, "think_complete", 3)
+    assert len(ids) == 3
+    assert sorted(bm.blocks_for_request(1)) == sorted(ids)
+    assert bm.blocks_for_request(999) == []
+
+    # Free one slot by id: present -> True, used_bytes drops one block.
+    assert bm.free_block_by_id(ids[0]) is True
+    assert bm.used_bytes == 2 * 16
+    assert sorted(bm.blocks_for_request(1)) == sorted(ids[1:])
+
+    # Freeing an absent id is a no-op returning False.
+    assert bm.free_block_by_id(ids[0]) is False
+    assert bm.free_block_by_id(4242) is False

@@ -470,6 +470,27 @@ impl PyBlockManager {
         let free = mgr.capacity_bytes().saturating_sub(mgr.used_bytes());
         Ok((free / block_bytes) as usize)
     }
+
+    /// Enumerate the block ids currently owned by `req_id`. The plugin uses
+    /// this at `ExitThink` to offload a request's resident think-complete KV
+    /// by exact id rather than estimating the count from token totals.
+    fn blocks_for_request(&self, req_id: u64) -> PyResult<Vec<u32>> {
+        let mgr = self
+            .inner
+            .lock()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(mgr.blocks_for_request(req_id))
+    }
+
+    /// Release a single block by id, returning its slot to the free pool.
+    /// Returns `True` if the block was present.
+    fn free_block_by_id(&self, block_id: u32) -> PyResult<bool> {
+        let mut mgr = self
+            .inner
+            .lock()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(mgr.free_block_by_id(block_id))
+    }
 }
 
 // ---------------------------------------------------------------------------
