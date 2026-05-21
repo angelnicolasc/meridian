@@ -13,7 +13,7 @@
 //! the source of truth and is what downstream forks should consume directly
 //! if they want to avoid Rust as a dependency.
 
-#![doc(html_root_url = "https://docs.rs/meridian-kernels/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/meridian-kernels/0.2.0")]
 #![warn(missing_docs, missing_debug_implementations, unreachable_pub)]
 
 pub mod ffi;

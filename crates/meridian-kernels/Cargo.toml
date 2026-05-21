@@ -27,7 +27,7 @@ nixl    = ["dep:blake3"]
 [dependencies]
 thiserror = { workspace = true }
 tracing   = { workspace = true }
-meridian-core = { path = "../meridian-core", version = "0.1.0" }
+meridian-core = { path = "../meridian-core", version = "0.2.0" }
 blake3        = { version = "1.5", optional = true }
 
 [dev-dependencies]

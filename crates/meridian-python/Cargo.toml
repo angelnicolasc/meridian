@@ -16,7 +16,7 @@ name       = "_meridian"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-meridian-core = { path = "../meridian-core", version = "0.1.0" }
+meridian-core = { path = "../meridian-core", version = "0.2.0" }
 pyo3          = { workspace = true }
 serde         = { workspace = true }
 serde_json    = { workspace = true }

@@ -5,7 +5,7 @@
 //! `PhaseRouter`, `PhaseRouterConfig`, `MeridianConfig`, and the event /
 //! signal types. Internal Rust-only types remain Rust-only.
 
-#![doc(html_root_url = "https://docs.rs/meridian-python/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/meridian-python/0.2.0")]
 #![warn(missing_docs, missing_debug_implementations, unreachable_pub)]
 
 use pyo3::exceptions::PyValueError;

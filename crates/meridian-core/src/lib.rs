@@ -37,7 +37,7 @@
 //! recorded in [`CHANGELOG.md`](https://github.com/angelnicolasc/meridian/blob/main/CHANGELOG.md)
 //! under a `BREAKING CHANGE` footer.
 
-#![doc(html_root_url = "https://docs.rs/meridian-core/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/meridian-core/0.2.0")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![forbid(unsafe_code)]
 #![warn(

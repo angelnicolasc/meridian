@@ -15,7 +15,7 @@ from meridian.entropy_probe import EntropyProbe, EntropySignal
 try:
     __version__ = version("meridian")
 except PackageNotFoundError:  # pragma: no cover — editable install before metadata
-    __version__ = "0.1.0"
+    __version__ = "0.2.0"
 
 __all__ = [
     "EntropyProbe",

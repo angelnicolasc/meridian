@@ -10,6 +10,8 @@ breaking changes and ADR-driven entries are written manually.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-21
+
 ### Added
 
 - `BlockManager` trait gained `free_block_by_id(block_id)` and
@@ -106,5 +108,6 @@ breaking changes and ADR-driven entries are written manually.
 - `PhaseEvent::ForceBudget` is now `{ inject_token, reason }`.
   **BREAKING** — tracked under the pre-1.0 stability policy per ADR-0007.
 
-[Unreleased]: https://github.com/angelnicolasc/meridian/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/angelnicolasc/meridian/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/angelnicolasc/meridian/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/angelnicolasc/meridian/releases/tag/v0.1.0
