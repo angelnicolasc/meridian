@@ -30,11 +30,18 @@ from typing import TYPE_CHECKING, Any
 
 from meridian.config import MeridianConfig
 from meridian.entropy_probe import EntropyProbe, EntropySignal
+from meridian.telemetry import init_otlp, record_blocks_offloaded, record_vocab_fallback
 
 if TYPE_CHECKING:  # pragma: no cover — typing only
     from vllm import AsyncLLMEngine
 
 logger = logging.getLogger("meridian.vllm")
+
+# Think-tokens-per-block used only when the block manager does not own a
+# request's allocations. In the live vLLM plugin the manager is a capacity
+# model rather than a mirror of vLLM's block table, so it holds no per-request
+# blocks to enumerate; this mirrors vLLM's canonical 16-token KV block.
+_DEFAULT_TOKENS_PER_BLOCK = 16
 
 
 class MeridianSchedulerPlugin:
@@ -111,6 +118,11 @@ class MeridianSchedulerPlugin:
         # Metric surface (also exposed via Prometheus from the Rust side).
         self._schedule_count = 0
         self._last_schedule_latency_ns = 0
+
+        # Optional OTLP export of the plugin's counters (Prometheus stays the
+        # primary surface). Off unless [telemetry] opts in.
+        if config.telemetry.otlp_enabled:
+            init_otlp(config.telemetry.otlp_endpoint, config.telemetry.service_name)
 
     # ------------------------------------------------------------------
     # Public surface used by the engine
@@ -305,30 +317,32 @@ class MeridianSchedulerPlugin:
             self._maybe_offload_for(req_id, tokens_used)
 
     def _maybe_offload_for(self, req_id: int, tokens_used: int) -> None:
-        """Queue the request's think blocks for fabric offload.
+        """Queue the request's think-complete blocks for fabric offload.
 
-        Without a richer block-manager surface we do not know each block id
-        individually here — the pyo3 binding exposes `available_blocks`
-        only, not enumeration. We model the offload as a *byte-budget*
-        signal: each ExitThink contributes `tokens_used` worth of blocks
-        to the pending pool, and once the threshold is crossed we issue
-        the offload counter / log line that production wiring (a real
-        NIXL agent) hooks into. The integration is end-to-end testable
-        once the binding surfaces block ids — tracked in DEVLOG D30.
+        When the block manager owns this request's allocations — as the
+        scheduler and the benchmark harness do — we enumerate the exact
+        block ids via ``blocks_for_request`` and reclaim each slot with
+        ``free_block_by_id`` as it is handed to the fabric (DEVLOG D30/D31).
+        In the live vLLM plugin the manager is a capacity model rather than a
+        mirror of vLLM's block table, so it owns no per-request blocks; there
+        we fall back to a geometry estimate. The offload count is reported
+        exactly either way. See ADR-0006.
         """
-        # Encode the number of think-complete blocks as a synthetic
-        # identifier list of the right length. Each entry is just the
-        # request id; the real fabric will receive the per-block payload
-        # once block enumeration lands.
-        block_size = max(1, getattr(self._config.kv_memory, "block_size_bytes", 16_384))
-        # Rough block count: tokens / 16 is the canonical vLLM ratio.
-        n_blocks = max(1, tokens_used // 16)
-        del block_size
+        block_ids = list(self._block_manager.blocks_for_request(req_id))
+        if block_ids:
+            for block_id in block_ids:
+                self._block_manager.free_block_by_id(block_id)
+            n_blocks = len(block_ids)
+        else:
+            n_blocks = max(1, tokens_used // _DEFAULT_TOKENS_PER_BLOCK)
+
         self._pending_offload.extend([req_id] * n_blocks)
         if len(self._pending_offload) >= self._disagg_threshold:
+            flushed = len(self._pending_offload)
+            record_blocks_offloaded(self._disagg_fabric, flushed)
             logger.info(
                 "disagg.offload fabric=%s blocks=%d",
-                self._disagg_fabric, len(self._pending_offload),
+                self._disagg_fabric, flushed,
             )
             self._pending_offload.clear()
 
@@ -406,6 +420,7 @@ class MeridianSchedulerPlugin:
             stacked = np.stack(due_rows, axis=0)
         except ValueError:
             # Heterogeneous vocab sizes — fall back to per-row compute.
+            record_vocab_fallback()
             out: dict[int, Any] = {}
             for i, rid, arr in zip(due_idx, due_req_ids, due_rows, strict=True):
                 sig = self._probe.compute(rid, arr)

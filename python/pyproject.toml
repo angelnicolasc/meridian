@@ -32,6 +32,9 @@ vllm = [
 torch = [
     "torch>=2.5",
 ]
+otel = [
+    "opentelemetry-exporter-otlp-proto-http>=1.28",
+]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
@@ -103,7 +106,10 @@ disallow_untyped_defs = true
 files                = ["meridian"]
 
 [[tool.mypy.overrides]]
-module = ["vllm.*", "torch.*", "meridian._meridian", "datasets", "pyarrow", "pyarrow.*"]
+module = [
+    "vllm.*", "torch.*", "meridian._meridian", "datasets", "pyarrow", "pyarrow.*",
+    "opentelemetry.exporter.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

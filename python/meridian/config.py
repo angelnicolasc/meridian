@@ -91,6 +91,21 @@ class ModelConfig(BaseModel):
     supports_think_disable: bool = False
 
 
+class TelemetryConfig(BaseModel):
+    """OpenTelemetry OTLP export toggle.
+
+    Off by default. Prometheus remains the primary metric surface; when
+    ``otlp_enabled`` the plugin also exports its counters to an OTLP collector
+    at ``otlp_endpoint``. Requires the ``otel`` extra.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    otlp_enabled: bool = False
+    otlp_endpoint: str = "http://localhost:4318"
+    service_name: str = "meridian"
+
+
 class MeridianConfig(BaseModel):
     """Root configuration parsed from `meridian.toml`."""
 
@@ -100,6 +115,7 @@ class MeridianConfig(BaseModel):
     entropy: EntropyConfig = Field(default_factory=EntropyConfig)
     kv_memory: KvConfig = Field(default_factory=KvConfig)
     disagg: DisaggConfig = Field(default_factory=DisaggConfig)
+    telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     model: dict[str, ModelConfig] = Field(default_factory=dict)
 
     @classmethod
