@@ -28,12 +28,18 @@ jobs:
           shared-key: docs
       - uses: peaceiris/actions-mdbook@v2
         with:
-          mdbook-version: latest
+          # Pinned to the last 0.4.x: mdbook 0.5 uses a new preprocessor
+          # protocol that mdbook-mermaid 0.14 (our rustc 1.85-compatible pin)
+          # cannot parse. 0.4.52 supports edition 2024 and the 0.4 protocol.
+          mdbook-version: "0.4.52"
 
       - name: Install mdbook-mermaid
-        # Pinned to 0.14.0: newer releases pull mdbook-core 0.5, which requires
-        # rustc 1.88 — the workspace standardises on 1.85.
-        run: cargo install mdbook-mermaid --version 0.14.0 --locked
+        # 0.15.0 is the last line that depends on mdbook 0.4 (0.17 pulls
+        # mdbook-core 0.5, MSRV rustc 1.88 — the workspace pins 1.85). It is
+        # installed WITHOUT --locked so it builds against the same mdbook 0.4.52
+        # lib the pinned binary ships; --locked would link an older mdbook lib
+        # whose preprocessor RenderContext the 0.4.52 binary cannot parse.
+        run: cargo install mdbook-mermaid --version 0.15.0
 
       - name: Wire mermaid assets
         # Adds the `mermaid` preprocessor and copies mermaid.min.js +
