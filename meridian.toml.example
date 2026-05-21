@@ -130,6 +130,24 @@ offload_threshold_blocks = 4
 
 
 # ---------------------------------------------------------------------------
+# [telemetry]
+# OpenTelemetry OTLP export. Off by default — Prometheus is the primary metric
+# surface. When enabled the plugin also exports its counters to an OTLP
+# collector. Requires the `otel` extra: pip install 'meridian[otel]'.
+# ---------------------------------------------------------------------------
+[telemetry]
+
+# Master switch for OTLP export.
+otlp_enabled = false
+
+# OTLP/HTTP collector endpoint.
+otlp_endpoint = "http://localhost:4318"
+
+# Resource service.name attached to exported telemetry.
+service_name = "meridian"
+
+
+# ---------------------------------------------------------------------------
 # [model.*]
 # Per-model token-boundary configuration. The phase router watches for these
 # ids in the decoded stream to detect <think>/</think> transitions.
@@ -146,6 +164,17 @@ reasoning_parser      = "deepseek_r1"
 supports_think_disable = false
 
 [model.qwen3]
+think_start_token_ids  = [151648]
+think_end_token_ids    = [151649]
+reasoning_parser       = "qwen3"
+supports_think_disable = true
+
+[model.qwen35]
+# Qwen3.5 (Alibaba, 2026) shares the Qwen tokenizer family, so the <think>/
+# </think> control-token ids mirror qwen3. The model emits "<think>\n ...
+# </think>\n\n", but the boundary detection keys on the control-token ids, not
+# the surrounding newlines. Confirm the ids against the deployed tokenizer at
+# benchmark time — the harness autodetects them at runtime regardless.
 think_start_token_ids  = [151648]
 think_end_token_ids    = [151649]
 reasoning_parser       = "qwen3"

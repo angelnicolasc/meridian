@@ -20,6 +20,16 @@ def test_example_config_parses() -> None:
     assert "deepseek_r1" in cfg.model
 
 
+@pytest.mark.skipif(not EXAMPLE.exists(), reason="meridian.toml.example not present")
+def test_qwen35_preset_present() -> None:
+    cfg = MeridianConfig.from_path(EXAMPLE)
+    assert "qwen35" in cfg.model
+    qwen35 = cfg.model["qwen35"]
+    assert qwen35.think_start_token_ids
+    assert qwen35.think_end_token_ids
+    assert qwen35.reasoning_parser == "qwen3"
+
+
 def test_defaults_validate() -> None:
     cfg = MeridianConfig()
     assert cfg.scheduler.think_tpot_budget_ms > 0
