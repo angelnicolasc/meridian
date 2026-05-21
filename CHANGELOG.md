@@ -10,6 +10,41 @@ breaking changes and ADR-driven entries are written manually.
 
 ## [Unreleased]
 
+### Added
+
+- `BlockManager` trait gained `free_block_by_id(block_id)` and
+  `blocks_for_request(req_id)`; `PhaseAwareBlockManager::is_resident(block_id)`.
+  These let fabric layers reclaim a single offloaded slot and enumerate a
+  request's resident blocks by exact id.
+- `NixlBackedBlockManager::offload_block` now reclaims the local slot after a
+  successful fabric push, and reports `Local` again once a reclaimed slot is
+  reused (closes the disagg offload loop end-to-end).
+- pyo3 `BlockManager` exposes `blocks_for_request` and `free_block_by_id`.
+- `MooncakeAdapter` — a `Fabric` implementation that re-frames the v1 wire
+  payload inside a Mooncake transfer envelope, enabling Mooncake protocol
+  compatibility over the same offload/ingest path.
+- Static-budget A/B baseline (`StaticBudgetBaseline`) modelling vLLM 0.9's
+  `thinking_token_budget`; `--baseline` now accepts `static-budget` and `all`.
+- N-way `ABComparisonReport`: compares any number of baselines against the run
+  under test, one delta column per baseline.
+- OpenTelemetry OTLP export: `meridian-core` `otel` cargo feature with a
+  `telemetry::install` helper (tracing spans), and a Python `meridian.telemetry`
+  module exporting the plugin counters; gated by the `[telemetry]` config
+  section and the `otel` Python extra.
+- `meridian_disagg_blocks_offloaded_total{fabric}` and
+  `meridian_vocab_fallback_total` Prometheus counters in the vLLM plugin.
+- `[model.qwen35]` preset and `[telemetry]` section in `meridian.toml.example`.
+- ADR-0008 (request preemption policy) — documents the deferral and design.
+- Manual, gated `publish` job in `release.yml` (dry-run by default, token-gated
+  live publish). mdBook now renders mermaid architecture and sequence diagrams.
+- Property-based tests for block-manager invariants and wire-format round-trips.
+
+### Changed
+
+- The vLLM plugin offload path enumerates exact block ids when the manager owns
+  them, replacing the `tokens_used // 16` heuristic with a named fallback used
+  only when the manager is a pure capacity model.
+
 ## [0.1.0] - 2026-05-20
 
 ### Added
