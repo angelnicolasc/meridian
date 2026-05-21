@@ -432,11 +432,12 @@ def _build_parser() -> argparse.ArgumentParser:
     common.add_argument("--name", type=str, default=None,
                         help="Override the config_name field in the report.")
     common.add_argument(
-        "--baseline", choices=["none", "stock"], default="none",
-        help="Run an A/B against a baseline scheduler. `stock` is a "
-             "single-queue priority-weight scheduler that matches vLLM "
-             "<= 0.8 behaviour. Produces ab-report.json/md alongside the "
-             "Meridian report.",
+        "--baseline", choices=["none", "stock", "static-budget", "all"], default="none",
+        help="Run an A/B against one or more baseline schedulers. `stock` is a "
+             "single-queue priority-weight scheduler (vLLM <= 0.8). "
+             "`static-budget` caps think tokens at a fixed budget (vLLM 0.9 "
+             "thinking_token_budget). `all` runs every baseline. Produces "
+             "ab-report.json/md alongside the Meridian report.",
     )
     common.add_argument(
         "--workload", choices=["synthetic", "sharegpt", "math500", "mix"],
@@ -481,17 +482,29 @@ def main(argv: list[str] | None = None) -> int:
             config_name=name,
             workload=workload,
         )
-        if args.baseline == "stock":
-            from benchmarks.baselines import run_stock_baseline
-            stock_results = run_stock_baseline(workload)
-            stock_report = aggregate(
-                stock_results,
-                config_name=f"{name}-stock",
-                duration_s=report.duration_s,
-                arrival_rate_rps=args.arrival_rate,
-                output_critical_eviction_events=0,
-            )
-            ab = ABComparisonReport(stock=stock_report, meridian=report)
+        if args.baseline != "none":
+            from benchmarks.baselines import run_static_budget_baseline, run_stock_baseline
+            reports = {}
+            if args.baseline in ("stock", "all"):
+                stock_name = f"{name}-stock"
+                reports[stock_name] = aggregate(
+                    run_stock_baseline(workload),
+                    config_name=stock_name,
+                    duration_s=report.duration_s,
+                    arrival_rate_rps=args.arrival_rate,
+                    output_critical_eviction_events=0,
+                )
+            if args.baseline in ("static-budget", "all"):
+                static_name = f"{name}-static"
+                reports[static_name] = aggregate(
+                    run_static_budget_baseline(workload),
+                    config_name=static_name,
+                    duration_s=report.duration_s,
+                    arrival_rate_rps=args.arrival_rate,
+                    output_critical_eviction_events=0,
+                )
+            reports[name] = report
+            ab = ABComparisonReport(reports=reports, under_test=name)
             ab.write_artifacts(out_dir)
             sys.stdout.write(ab.to_markdown() + "\n")
     elif args.mode == "real-vllm":  # pragma: no cover — GPU-only

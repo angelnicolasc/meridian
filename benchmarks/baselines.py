@@ -90,6 +90,60 @@ class StockSchedulerBaseline:
         return result
 
 
+@dataclass(slots=True)
+class StaticBudgetBaseline:
+    """Single-queue scheduler with a static think-token budget.
+
+    Models vLLM 0.9's ``thinking_token_budget``: a fixed per-request cap on
+    think tokens. When a reasoning request would exceed the cap the scheduler
+    injects ``</think>`` unconditionally — no entropy signal, no convergence
+    detection. This is the prior art Meridian's EAT/RPDI-driven forcing aims
+    to beat: the static cap fires on a counter, so it either cuts off a
+    request that was still making progress or lets a converged request run to
+    the cap. Dispatch order is otherwise identical to
+    :class:`StockSchedulerBaseline` (priority by arrival, no phase awareness).
+    """
+
+    think_token_budget: int = 2048
+    think_per_token_us: float = 6.0
+    output_per_token_us: float = 18.0
+    prefill_per_token_us: float = 1.2
+    _arrival_counter: int = field(default=0, init=False)
+
+    def run_request(self, wl: WorkloadRequest) -> RequestResult:
+        """Replay one request, forcing ``</think>`` at the static budget."""
+        self._arrival_counter += 1
+        result = RequestResult(req_id=wl.request_id, kind=wl.kind)
+
+        t0 = time.perf_counter()
+        prefill_tokens = max(8, len(wl.prompt) // 4)
+        _busy_sleep_us(self.prefill_per_token_us * prefill_tokens)
+        result.ttft_ms = (time.perf_counter() - t0) * 1000.0
+
+        if wl.kind == "reasoning":
+            think = min(wl.expected_think_tokens, self.think_token_budget)
+            for _ in range(think):
+                _busy_sleep_us(self.think_per_token_us)
+            result.think_tokens = think
+            if wl.expected_think_tokens > self.think_token_budget:
+                result.budget_forced = True
+                result.force_reason = "static_cap"
+
+        ttot_start = time.perf_counter()
+        prev = ttot_start
+        for i in range(wl.expected_output_tokens):
+            _busy_sleep_us(self.output_per_token_us)
+            now = time.perf_counter()
+            if i == 0:
+                result.ttot_ms = (now - ttot_start) * 1000.0
+            else:
+                result.output_itl_ms.append((now - prev) * 1000.0)
+            prev = now
+        result.output_tokens = wl.expected_output_tokens
+
+        return result
+
+
 def _busy_sleep_us(us: float) -> None:
     """Microsecond-accurate sleep — same primitive the Meridian decoder uses."""
     if us <= 0:
@@ -115,6 +169,26 @@ def run_stock_baseline(
     report via :class:`benchmarks.metrics.ABComparisonReport`.
     """
     sched = StockSchedulerBaseline(
+        think_per_token_us=think_per_token_us,
+        output_per_token_us=output_per_token_us,
+    )
+    return [sched.run_request(wl) for wl in workload]
+
+
+def run_static_budget_baseline(
+    workload: list[WorkloadRequest],
+    *,
+    think_token_budget: int = 2048,
+    think_per_token_us: float = 6.0,
+    output_per_token_us: float = 18.0,
+) -> list[RequestResult]:
+    """Replay ``workload`` through the static-budget baseline and return results.
+
+    Mirrors :func:`run_stock_baseline` but caps think tokens at
+    ``think_token_budget``, modelling vLLM 0.9's ``thinking_token_budget``.
+    """
+    sched = StaticBudgetBaseline(
+        think_token_budget=think_token_budget,
         think_per_token_us=think_per_token_us,
         output_per_token_us=output_per_token_us,
     )

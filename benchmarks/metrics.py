@@ -153,77 +153,116 @@ class BenchmarkReport:
         (path / "report.md").write_text(self.to_markdown(), encoding="utf-8")
 
 
+# Metrics shown in the A/B table. Each is (label, BenchmarkReport attr,
+# lower_is_better). All current metrics are lower-is-better.
+_AB_METRICS: tuple[tuple[str, str, bool], ...] = (
+    ("TTFT P50 (ms)",            "ttft_p50_ms",                    True),
+    ("TTFT P95 (ms)",            "ttft_p95_ms",                    True),
+    ("TTOT P50 (ms)",            "ttot_p50_ms",                    True),
+    ("TTOT P95 (ms)",            "ttot_p95_ms",                    True),
+    ("Output ITL P50",          "output_itl_p50_ms",              True),
+    ("Output ITL P95",          "output_itl_p95_ms",              True),
+    ("Output ITL P99",          "output_itl_p99_ms",              True),
+    ("Think tokens avg",        "think_tokens_avg",               True),
+    ("OutputCritical evictions", "output_critical_eviction_events", True),
+)
+
+
 @dataclass(slots=True)
 class ABComparisonReport:
-    """Side-by-side A/B comparison of two :class:`BenchmarkReport` runs.
+    """A/B comparison of N scheduler runs against one run under test.
 
-    Convention: ``stock`` is the baseline scheduler (priority-weight,
-    no phase awareness) and ``meridian`` is the run under test.
+    ``reports`` maps a config name to its :class:`BenchmarkReport`; the run
+    keyed by ``under_test`` (Meridian) is the one being evaluated, and a delta
+    column is produced for it against every other (baseline) report. The
+    common case is a single baseline (stock or static-budget) versus Meridian;
+    additional baselines simply add columns.
     """
 
-    stock: BenchmarkReport
-    meridian: BenchmarkReport
+    reports: dict[str, BenchmarkReport]
+    under_test: str
+
+    def __post_init__(self) -> None:
+        if self.under_test not in self.reports:
+            msg = f"under_test {self.under_test!r} not among reports {list(self.reports)}"
+            raise KeyError(msg)
+
+    @classmethod
+    def pair(cls, baseline: BenchmarkReport, meridian: BenchmarkReport) -> ABComparisonReport:
+        """Convenience constructor for the single-baseline case."""
+        return cls(
+            reports={baseline.config_name: baseline, meridian.config_name: meridian},
+            under_test=meridian.config_name,
+        )
+
+    def _baseline_names(self) -> list[str]:
+        return [name for name in self.reports if name != self.under_test]
 
     def to_json(self) -> str:
-        """Serialise both reports plus the computed deltas to JSON."""
-        deltas = self._deltas()
+        """Serialise every report plus the under-test deltas against each baseline."""
+        ut = self.reports[self.under_test]
+        deltas = {
+            base: {
+                attr: _delta_pct(
+                    float(getattr(self.reports[base], attr)),
+                    float(getattr(ut, attr)),
+                )
+                for _label, attr, _lb in _AB_METRICS
+            }
+            for base in self._baseline_names()
+        }
         payload = {
-            "stock": asdict(self.stock),
-            "meridian": asdict(self.meridian),
+            "under_test": self.under_test,
+            "reports": {name: asdict(rep) for name, rep in self.reports.items()},
             "delta_pct": deltas,
         }
         return json.dumps(payload, indent=4, sort_keys=True)
 
     def to_markdown(self) -> str:
-        """Render a three-column ``Stock | Meridian | Δ (%)`` table.
+        """Render an N-way value table plus a Δ(%) column per baseline.
 
-        Lower-is-better metrics (TTFT, TTOT, ITL, eviction events) flag
-        ``WIN`` / ``win`` / ``FLAT`` / ``loss`` / ``LOSS``. The semaphore
-        is also written into the JSON form so downstream dashboards can
-        colour-code without re-parsing.
+        Lower-is-better metrics flag ``WIN`` / ``win`` / ``FLAT`` / ``loss``
+        / ``LOSS`` relative to each baseline. The deltas are also in the JSON
+        form so dashboards can colour-code without re-parsing.
         """
-        st, me = self.stock, self.meridian
-        rows: list[tuple[str, float, float, bool]] = [
-            ("TTFT P50 (ms)",            st.ttft_p50_ms,           me.ttft_p50_ms,           True),
-            ("TTFT P95 (ms)",            st.ttft_p95_ms,           me.ttft_p95_ms,           True),
-            ("TTOT P50 (ms)",            st.ttot_p50_ms,           me.ttot_p50_ms,           True),
-            ("TTOT P95 (ms)",            st.ttot_p95_ms,           me.ttot_p95_ms,           True),
-            ("Output ITL P50",           st.output_itl_p50_ms,     me.output_itl_p50_ms,     True),
-            ("Output ITL P95",           st.output_itl_p95_ms,     me.output_itl_p95_ms,     True),
-            ("Output ITL P99",           st.output_itl_p99_ms,     me.output_itl_p99_ms,     True),
-            ("Think tokens avg",         st.think_tokens_avg,      me.think_tokens_avg,      True),
-            ("OutputCritical evictions",
-             float(st.output_critical_eviction_events),
-             float(me.output_critical_eviction_events),
-             True),
-        ]
-        title = (
-            f"# A/B comparison: stock `{self.stock.config_name}` "
-            f"vs Meridian `{self.meridian.config_name}`"
-        )
+        ut = self.reports[self.under_test]
+        baselines = self._baseline_names()
+        value_cols = [*baselines, self.under_test]
+
+        header = ["Metric", *value_cols, *(f"Δ% vs {b}" for b in baselines)]
+        sep = ["---"] * len(header)
         lines = [
-            title,
+            f"# A/B comparison: under test `{self.under_test}`",
             "",
-            f"- Duration: stock **{self.stock.duration_s:.1f} s** vs "
-            f"Meridian **{self.meridian.duration_s:.1f} s**",
-            f"- Requests: stock {self.stock.n_requests} (reasoning {self.stock.n_reasoning}) "
-            f"vs Meridian {self.meridian.n_requests} (reasoning {self.meridian.n_reasoning})",
+            "- Runs: "
+            + ", ".join(
+                f"`{name}` ({rep.n_requests} req, reasoning {rep.n_reasoning})"
+                for name, rep in self.reports.items()
+            ),
             "",
-            "| Metric                       |     Stock |  Meridian |    Δ (%)  | Result |",
-            "|------------------------------|-----------|-----------|-----------|--------|",
+            "| " + " | ".join(header) + " |",
+            "| " + " | ".join(sep) + " |",
         ]
-        for label, s, m, lower_better in rows:
-            delta = _delta_pct(s, m)
-            sem = _semaphore(delta, lower_is_better=lower_better)
-            delta_str = "   n/a   " if not math.isfinite(delta) else f"{delta:+8.2f} "
-            lines.append(
-                f"| {label:<28} | {s:9.2f} | {m:9.2f} | {delta_str} | {sem:<6} |",
-            )
+        for label, attr, lower_better in _AB_METRICS:
+            values = [float(getattr(self.reports[name], attr)) for name in value_cols]
+            cells = [f"{v:.2f}" for v in values]
+            delta_cells: list[str] = []
+            ut_val = float(getattr(ut, attr))
+            for base in baselines:
+                delta = _delta_pct(float(getattr(self.reports[base], attr)), ut_val)
+                sem = _semaphore(delta, lower_is_better=lower_better)
+                delta_cells.append("n/a" if not math.isfinite(delta) else f"{delta:+.2f} {sem}")
+            lines.append("| " + " | ".join([label, *cells, *delta_cells]) + " |")
+
         lines.extend([
             "",
-            f"- Budget forced (Meridian only): **{self.meridian.budget_forced_pct:.1f}%** "
-            f"of reasoning requests (stock baseline never forces)",
-            f"- Force reasons: {self.meridian.budget_forced_by_reason}",
+            "## Budget forcing",
+            "",
+            *(
+                f"- `{name}`: **{rep.budget_forced_pct:.1f}%** of reasoning requests forced "
+                f"({rep.budget_forced_by_reason})"
+                for name, rep in self.reports.items()
+            ),
         ])
         return "\n".join(lines)
 
@@ -233,26 +272,6 @@ class ABComparisonReport:
         path.mkdir(parents=True, exist_ok=True)
         (path / "ab-report.json").write_text(self.to_json(), encoding="utf-8")
         (path / "ab-report.md").write_text(self.to_markdown(), encoding="utf-8")
-
-    def _deltas(self) -> dict[str, float]:
-        return {
-            "ttft_p50": _delta_pct(self.stock.ttft_p50_ms, self.meridian.ttft_p50_ms),
-            "ttft_p95": _delta_pct(self.stock.ttft_p95_ms, self.meridian.ttft_p95_ms),
-            "ttot_p50": _delta_pct(self.stock.ttot_p50_ms, self.meridian.ttot_p50_ms),
-            "ttot_p95": _delta_pct(self.stock.ttot_p95_ms, self.meridian.ttot_p95_ms),
-            "output_itl_p50": _delta_pct(
-                self.stock.output_itl_p50_ms, self.meridian.output_itl_p50_ms,
-            ),
-            "output_itl_p95": _delta_pct(
-                self.stock.output_itl_p95_ms, self.meridian.output_itl_p95_ms,
-            ),
-            "output_itl_p99": _delta_pct(
-                self.stock.output_itl_p99_ms, self.meridian.output_itl_p99_ms,
-            ),
-            "think_tokens_avg": _delta_pct(
-                self.stock.think_tokens_avg, self.meridian.think_tokens_avg,
-            ),
-        }
 
 
 # ---------------------------------------------------------------------------

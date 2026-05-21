@@ -1,11 +1,17 @@
-"""Tests for the A/B baseline scheduler and the comparison report."""
+"""Tests for the A/B baseline schedulers and the comparison report."""
 
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 
-from benchmarks.baselines import StockSchedulerBaseline, run_stock_baseline
+from benchmarks.baselines import (
+    StaticBudgetBaseline,
+    StockSchedulerBaseline,
+    run_static_budget_baseline,
+    run_stock_baseline,
+)
 from benchmarks.metrics import ABComparisonReport, BenchmarkReport, RequestResult, aggregate
 from benchmarks.workloads import WorkloadRequest, synthetic_mix
 
@@ -23,6 +29,31 @@ def _aggregate(
         config_name=name,
         duration_s=duration,
         arrival_rate_rps=4.0,
+        output_critical_eviction_events=0,
+    )
+
+
+def _scaled(base: BenchmarkReport, name: str, factor: float) -> BenchmarkReport:
+    """A copy of ``base`` with latency metrics scaled by ``factor``."""
+    return BenchmarkReport(
+        config_name=name,
+        duration_s=base.duration_s,
+        arrival_rate_rps=base.arrival_rate_rps,
+        n_requests=base.n_requests,
+        n_reasoning=base.n_reasoning,
+        n_chat=base.n_chat,
+        ttft_p50_ms=base.ttft_p50_ms * factor,
+        ttft_p95_ms=base.ttft_p95_ms * factor,
+        ttot_p50_ms=base.ttot_p50_ms * factor,
+        ttot_p95_ms=base.ttot_p95_ms * factor,
+        output_itl_p50_ms=base.output_itl_p50_ms * factor,
+        output_itl_p95_ms=base.output_itl_p95_ms * factor,
+        output_itl_p99_ms=base.output_itl_p99_ms * factor,
+        think_tokens_avg=base.think_tokens_avg * factor,
+        think_tokens_p95=base.think_tokens_p95 * factor,
+        output_tokens_avg=base.output_tokens_avg,
+        budget_forced_pct=42.0,
+        budget_forced_by_reason={"converged": 3},
         output_critical_eviction_events=0,
     )
 
@@ -54,61 +85,78 @@ def test_run_stock_baseline_module_function() -> None:
     assert len(results) == len(wl)
 
 
-def test_ab_comparison_report_computes_deltas_and_writes_artifacts(
-    tmp_path: Path,
-) -> None:
+def test_static_budget_baseline_forces_at_cap() -> None:
+    # A budget below the smallest reasoning think target guarantees a force.
+    sched = StaticBudgetBaseline(
+        think_token_budget=1,
+        think_per_token_us=0.1,
+        output_per_token_us=0.3,
+        prefill_per_token_us=0.1,
+    )
     wl = _tiny_workload()
-    results = run_stock_baseline(
-        wl, think_per_token_us=0.1, output_per_token_us=0.3,
-    )
-    stock = _aggregate("stock", results, duration=0.5)
-    # Build a synthetic "Meridian" report whose metrics are systematically
-    # ~30 % faster than the stock baseline so the delta calculation is
-    # exercised on real numbers.
-    meridian = BenchmarkReport(
-        config_name="meridian",
-        duration_s=stock.duration_s,
-        arrival_rate_rps=stock.arrival_rate_rps,
-        n_requests=stock.n_requests,
-        n_reasoning=stock.n_reasoning,
-        n_chat=stock.n_chat,
-        ttft_p50_ms=stock.ttft_p50_ms * 0.7,
-        ttft_p95_ms=stock.ttft_p95_ms * 0.7,
-        ttot_p50_ms=stock.ttot_p50_ms * 0.7,
-        ttot_p95_ms=stock.ttot_p95_ms * 0.7,
-        output_itl_p50_ms=stock.output_itl_p50_ms * 0.7,
-        output_itl_p95_ms=stock.output_itl_p95_ms * 0.7,
-        output_itl_p99_ms=stock.output_itl_p99_ms * 0.7,
-        think_tokens_avg=stock.think_tokens_avg * 0.5,
-        think_tokens_p95=stock.think_tokens_p95 * 0.5,
-        output_tokens_avg=stock.output_tokens_avg,
-        budget_forced_pct=42.0,
-        budget_forced_by_reason={"converged": 3},
-        output_critical_eviction_events=0,
-    )
+    results = [sched.run_request(r) for r in wl]
+    reasoning = [(r, w) for r, w in zip(results, wl, strict=True) if w.kind == "reasoning"]
+    assert reasoning, "tiny workload should contain reasoning requests"
+    for r, w in reasoning:
+        # Think tokens are capped at the budget; the force flag fires.
+        assert r.think_tokens <= 1
+        assert r.budget_forced
+        assert r.force_reason == "static_cap"
+        assert w.expected_think_tokens > 1
 
-    ab = ABComparisonReport(stock=stock, meridian=meridian)
+
+def test_run_static_budget_baseline_module_function() -> None:
+    wl = _tiny_workload()
+    results = run_static_budget_baseline(wl, think_token_budget=4096)
+    assert len(results) == len(wl)
+
+
+def test_ab_comparison_report_pair_writes_artifacts(tmp_path: Path) -> None:
+    wl = _tiny_workload()
+    stock = _aggregate("stock", run_stock_baseline(wl), duration=0.5)
+    meridian = _scaled(stock, "meridian", 0.7)
+
+    ab = ABComparisonReport.pair(stock, meridian)
     md = ab.to_markdown()
-    assert "A/B comparison" in md
-    assert "Stock" in md
-    assert "Meridian" in md
-    # All deltas where stock > 0 must be finite (no nans leaking).
-    js = ab.to_json()
-    assert "\"delta_pct\":" in js
+    assert "under test `meridian`" in md
+    assert "stock" in md
+    js = json.loads(ab.to_json())
+    assert js["under_test"] == "meridian"
+    assert set(js["reports"]) == {"stock", "meridian"}
+    assert "stock" in js["delta_pct"]
+    # ~30% faster -> negative deltas on lower-is-better metrics.
+    assert js["delta_pct"]["stock"]["ttot_p95_ms"] < 0
 
     ab.write_artifacts(tmp_path)
     assert (tmp_path / "ab-report.json").exists()
     assert (tmp_path / "ab-report.md").exists()
 
 
-def test_ab_delta_pct_handles_zero_baseline_gracefully() -> None:
-    from dataclasses import asdict, replace
+def test_ab_comparison_report_n_way() -> None:
     wl = _tiny_workload()
-    stock = _aggregate("zero", run_stock_baseline(wl), duration=0.1)
-    # Force a zero in the stock side to exercise the divide-by-zero guard.
+    stock = _aggregate("stock", run_stock_baseline(wl), duration=0.5)
+    static = _scaled(stock, "static", 0.9)
+    meridian = _scaled(stock, "meridian", 0.6)
+
+    ab = ABComparisonReport(
+        reports={"stock": stock, "static": static, "meridian": meridian},
+        under_test="meridian",
+    )
+    js = json.loads(ab.to_json())
+    assert set(js["delta_pct"]) == {"stock", "static"}
+    md = ab.to_markdown()
+    # One delta column per baseline.
+    assert "Δ% vs stock" in md
+    assert "Δ% vs static" in md
+
+
+def test_ab_delta_pct_handles_zero_baseline_gracefully() -> None:
+    from dataclasses import replace
+    wl = _tiny_workload()
+    stock = _aggregate("stock", run_stock_baseline(wl), duration=0.1)
+    # Force a zero on the baseline side to exercise the divide-by-zero guard.
     stock = replace(stock, ttft_p50_ms=0.0)
-    meridian = replace(stock, ttft_p50_ms=1.0)
-    ab = ABComparisonReport(stock=stock, meridian=meridian)
-    deltas = ab._deltas()
-    assert math.isnan(deltas["ttft_p50"])
-    del asdict
+    meridian = replace(stock, config_name="meridian", ttft_p50_ms=1.0)
+    ab = ABComparisonReport.pair(stock, meridian)
+    deltas = json.loads(ab.to_json())["delta_pct"]["stock"]
+    assert math.isnan(deltas["ttft_p50_ms"])
