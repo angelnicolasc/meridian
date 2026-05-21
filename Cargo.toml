@@ -42,7 +42,9 @@ tracing-subscriber       = { version = "0.3", features = ["env-filter", "json"] 
 tracing-opentelemetry    = "0.27"
 opentelemetry            = "0.26"
 opentelemetry_sdk        = "0.26"
-opentelemetry-otlp       = "0.26"
+# HTTP + blocking transport so consumers (meridian-core `otel` feature) avoid
+# pulling an async runtime; default grpc-tonic transport is disabled.
+opentelemetry-otlp       = { version = "0.26", default-features = false, features = ["http-proto", "reqwest-blocking-client", "trace"] }
 metrics                  = "0.24"
 metrics-exporter-prometheus = "0.16"
 

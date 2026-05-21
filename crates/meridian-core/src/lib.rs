@@ -53,6 +53,8 @@ pub mod error;
 pub mod metrics;
 pub mod phase_router;
 pub mod scheduler;
+#[cfg(feature = "otel")]
+pub mod telemetry;
 pub mod types;
 
 pub use crate::block_manager::{BlockManager, PhaseAwareBlockManager};

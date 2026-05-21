@@ -27,6 +27,13 @@ toml                        = { workspace = true }
 tracing                     = { workspace = true }
 metrics                     = { workspace = true }
 metrics-exporter-prometheus = { workspace = true, optional = true }
+# OpenTelemetry OTLP export (feature `otel`). HTTP + blocking transport keeps
+# the core free of an async runtime; see `telemetry`.
+opentelemetry         = { workspace = true, optional = true }
+opentelemetry_sdk     = { workspace = true, optional = true }
+opentelemetry-otlp    = { workspace = true, optional = true }
+tracing-opentelemetry = { workspace = true, optional = true }
+tracing-subscriber    = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest          = { workspace = true }
@@ -38,6 +45,13 @@ tracing-subscriber = { workspace = true }
 [features]
 default     = []
 prometheus  = ["dep:metrics-exporter-prometheus"]
+otel        = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+    "dep:tracing-opentelemetry",
+    "dep:tracing-subscriber",
+]
 unstable    = []
 
 [[bench]]
