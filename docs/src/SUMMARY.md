@@ -23,6 +23,7 @@
 - [ADR-0005: Benchmark methodology](adr/0005-benchmark-methodology.md)
 - [ADR-0006: Disagg KV transfer protocol](adr/0006-disagg-kv-transfer.md)
 - [ADR-0007: Release and versioning policy](adr/0007-release-versioning-policy.md)
+- [ADR-0008: Request preemption policy](adr/0008-request-preemption.md)
 - [Template](adr/template.md)
 
 # Operations

@@ -18,6 +18,7 @@ Lifecycle: `Proposed` → `Accepted` → (later) `Superseded by ADR-NNNN` /
 | 0005 | Accepted   | [Benchmark methodology](0005-benchmark-methodology.md)           |
 | 0006 | Accepted   | [Disagg KV transfer protocol](0006-disagg-kv-transfer.md)        |
 | 0007 | Accepted   | [Release and versioning policy](0007-release-versioning-policy.md) |
+| 0008 | Accepted   | [Request preemption policy](0008-request-preemption.md)         |
 
 ## Writing a new ADR
 
