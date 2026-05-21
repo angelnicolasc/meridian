@@ -256,6 +256,78 @@ impl Fabric for SyntheticNixlFabric {
 }
 
 // ---------------------------------------------------------------------------
+// MooncakeAdapter — protocol-compatibility shim (ADR-0006 §Mooncake)
+// ---------------------------------------------------------------------------
+
+/// Mooncake magic prefixing every transfer-engine segment.
+const MOONCAKE_MAGIC: [u8; 4] = *b"MNCK";
+
+/// Mooncake protocol-compatibility adapter.
+///
+/// Re-frames the Meridian wire payload inside a minimal Mooncake transfer
+/// envelope (`magic + segment_len + payload`) before handing it to an inner
+/// fabric, and strips the envelope on `pull`. The Meridian payload the
+/// envelope carries is byte-identical, so [`decode`] on the receiving side is
+/// unchanged. This keeps a single set of `BlockManager` call sites portable
+/// across NIXL and Mooncake; a real Mooncake build swaps the inner fabric for
+/// the Mooncake transfer engine without touching the offload/ingest path.
+#[derive(Debug)]
+pub struct MooncakeAdapter {
+    inner: Arc<dyn Fabric>,
+}
+
+impl MooncakeAdapter {
+    /// Wrap an inner fabric with Mooncake segment framing.
+    #[must_use]
+    pub fn new(inner: Arc<dyn Fabric>) -> Self {
+        Self { inner }
+    }
+
+    fn wrap(payload: &[u8]) -> Vec<u8> {
+        let mut out = Vec::with_capacity(8 + payload.len());
+        out.extend_from_slice(&MOONCAKE_MAGIC);
+        out.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        out.extend_from_slice(payload);
+        out
+    }
+
+    fn unwrap(framed: &[u8]) -> Result<Vec<u8>> {
+        if framed.len() < 8 {
+            return Err(Error::Disagg(format!(
+                "mooncake frame truncated: {} < 8",
+                framed.len(),
+            )));
+        }
+        if framed[0..4] != MOONCAKE_MAGIC {
+            return Err(Error::Disagg("mooncake segment magic mismatch".to_string()));
+        }
+        let len = u32::from_le_bytes(framed[4..8].try_into().unwrap_or([0; 4])) as usize;
+        if framed.len() < 8 + len {
+            return Err(Error::Disagg(format!(
+                "mooncake segment truncated: claims {len} bytes, has {}",
+                framed.len() - 8,
+            )));
+        }
+        Ok(framed[8..8 + len].to_vec())
+    }
+}
+
+impl Fabric for MooncakeAdapter {
+    fn push(&self, payload: Vec<u8>) -> Result<u64> {
+        self.inner.push(Self::wrap(&payload))
+    }
+
+    fn pull(&self, handle: u64) -> Result<Vec<u8>> {
+        let framed = self.inner.pull(handle)?;
+        Self::unwrap(&framed)
+    }
+
+    fn label(&self) -> &'static str {
+        "mooncake-synth"
+    }
+}
+
+// ---------------------------------------------------------------------------
 // NixlBackedBlockManager — wraps a local manager and routes
 // offload/ingest through a `Fabric`.
 // ---------------------------------------------------------------------------
@@ -331,6 +403,18 @@ impl BlockManager for NixlBackedBlockManager {
         self.local.capacity_bytes()
     }
 
+    fn free_block_by_id(&mut self, block_id: u32) -> bool {
+        let freed = self.local.free_block_by_id(block_id);
+        if freed {
+            self.remote_ids.remove(&block_id);
+        }
+        freed
+    }
+
+    fn blocks_for_request(&self, req_id: u64) -> Vec<u32> {
+        self.local.blocks_for_request(req_id)
+    }
+
     fn offload_block(&mut self, block_id: u32) -> Result<Vec<u8>> {
         // For the synthetic fabric the body is a placeholder — a real NIXL
         // build would copy the device-resident bytes into a host staging
@@ -339,13 +423,11 @@ impl BlockManager for NixlBackedBlockManager {
         let body = vec![0u8; usize::try_from(self.local.block_size_bytes()).unwrap_or(0)];
         let payload = encode(BlockTier::ThinkComplete, &body);
         let handle = self.fabric.push(payload)?;
+        // The block now lives on the fabric: drop the resident slot so its
+        // capacity returns to the local pool, and record the handle so
+        // `block_location` reports it as `Remote`.
+        self.local.free_block_by_id(block_id);
         self.remote_ids.insert(block_id, handle);
-        // Local copy is gone — give the slot back to the local pool.
-        // We model this by freeing the singleton request that owned the
-        // block. The plugin offloads in batches at `ExitThink`, after which
-        // the caller is expected to mark the request as having no resident
-        // KV; full integration with `free_block_by_id` is tracked in
-        // DEVLOG D30.
         Ok(body)
     }
 
@@ -358,7 +440,10 @@ impl BlockManager for NixlBackedBlockManager {
     }
 
     fn block_location(&self, block_id: u32) -> BlockLocation {
-        if self.remote_ids.contains_key(&block_id) {
+        // A block is remote only while it remains offloaded. Once its freed
+        // slot is reallocated to a new local block, the slot is local again
+        // even though the id is still in `remote_ids`.
+        if self.remote_ids.contains_key(&block_id) && !self.local.is_resident(block_id) {
             BlockLocation::Remote {
                 fabric: self.fabric.label(),
             }

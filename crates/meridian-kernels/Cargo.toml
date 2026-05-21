@@ -35,6 +35,7 @@ blake3        = { version = "1.5", optional = true }
 # correctness test, without forcing the main crate to depend on a Rust CUDA
 # binding. Pinned to a version that supports CUDA 12.x.
 cudarc = { version = "0.12", optional = false, default-features = false, features = ["cuda-12060"] }
+proptest = { workspace = true }
 
 [build-dependencies]
 # Only needed when building with `--features cuda`. Cargo will still pull
