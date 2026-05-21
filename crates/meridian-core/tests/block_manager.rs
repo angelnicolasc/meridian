@@ -56,6 +56,62 @@ fn free_is_idempotent() {
 }
 
 // ---------------------------------------------------------------------------
+// free_block_by_id / blocks_for_request / is_resident (D30, D31)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn free_block_by_id_returns_slot_and_reports_presence() {
+    let mut mgr = manager_with_blocks(4, false);
+    let ids = mgr.allocate(1, BlockTier::ThinkComplete, 3).unwrap();
+    assert_eq!(mgr.used_bytes(), 3 * 16);
+
+    let target = ids[1];
+    assert!(mgr.is_resident(target));
+    assert!(mgr.free_block_by_id(target));
+    assert!(!mgr.is_resident(target));
+    assert_eq!(mgr.used_bytes(), 2 * 16);
+    assert_eq!(mgr.blocks_in_tier(BlockTier::ThinkComplete), 2);
+
+    // Second free of the same id is a no-op returning false.
+    assert!(!mgr.free_block_by_id(target));
+    // Unknown id is also false.
+    assert!(!mgr.free_block_by_id(9999));
+}
+
+#[test]
+fn free_block_by_id_returns_id_to_pool_for_reuse() {
+    let mut mgr = manager_with_blocks(2, false);
+    let ids = mgr.allocate(1, BlockTier::ThinkActive, 2).unwrap();
+    let freed_id = ids[0];
+    assert!(mgr.free_block_by_id(freed_id));
+
+    // The freed id is recycled by the next allocation.
+    let reused = mgr.allocate(2, BlockTier::OutputCritical, 1).unwrap();
+    assert_eq!(reused, vec![freed_id]);
+    assert!(mgr.is_resident(freed_id));
+}
+
+#[test]
+fn blocks_for_request_enumerates_only_that_request() {
+    let mut mgr = manager_with_blocks(8, false);
+    let a = mgr.allocate(1, BlockTier::ThinkActive, 3).unwrap();
+    let _ = mgr.allocate(2, BlockTier::ThinkActive, 2).unwrap();
+
+    let mut got = mgr.blocks_for_request(1);
+    got.sort_unstable();
+    let mut want = a.clone();
+    want.sort_unstable();
+    assert_eq!(got, want);
+
+    assert_eq!(mgr.blocks_for_request(2).len(), 2);
+    assert!(mgr.blocks_for_request(999).is_empty());
+
+    // After freeing the request its enumeration is empty.
+    mgr.free(1);
+    assert!(mgr.blocks_for_request(1).is_empty());
+}
+
+// ---------------------------------------------------------------------------
 // demote_think_blocks
 // ---------------------------------------------------------------------------
 

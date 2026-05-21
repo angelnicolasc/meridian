@@ -78,6 +78,27 @@ pub trait BlockManager: Send + Sync {
         self.capacity_bytes().saturating_sub(self.used_bytes())
     }
 
+    /// Release a single block by id, returning its slot to the free pool.
+    /// Returns `true` if the block was present. Fabric layers call this to
+    /// reclaim local capacity after a successful offload, rather than freeing
+    /// every block owned by the request.
+    ///
+    /// Default implementation is a no-op returning `false`.
+    fn free_block_by_id(&mut self, block_id: u32) -> bool {
+        let _ = block_id;
+        false
+    }
+
+    /// Enumerate the block ids currently owned by `req_id`, in unspecified
+    /// order. Lets callers offload or inspect a request's resident KV without
+    /// inferring block counts from token totals.
+    ///
+    /// Default implementation returns an empty vector.
+    fn blocks_for_request(&self, req_id: u64) -> Vec<u32> {
+        let _ = req_id;
+        Vec::new()
+    }
+
     // -------------------------------------------------------------------
     // Disaggregated KV transfer (ADR-0006)
     //
@@ -192,6 +213,14 @@ impl PhaseAwareBlockManager {
         self.eviction_queues[tier as usize].len()
     }
 
+    /// Whether `block_id` is currently a live local block. Fabric wrappers use
+    /// this to distinguish a slot that was offloaded (and possibly reused)
+    /// from one that still holds resident KV.
+    #[must_use]
+    pub fn is_resident(&self, block_id: u32) -> bool {
+        self.blocks.contains_key(&block_id)
+    }
+
     fn fresh_block_id(&mut self) -> u32 {
         if let Some(id) = self.free_list.pop() {
             return id;
@@ -273,6 +302,26 @@ impl BlockManager for PhaseAwareBlockManager {
         }
 
         metrics::gauge!(names::BLOCK_MANAGER_USED_BYTES).set(self.used_bytes as f64);
+    }
+
+    fn free_block_by_id(&mut self, block_id: u32) -> bool {
+        self.remove_from_tier_index(block_id);
+        if let Some(block) = self.blocks.remove(&block_id) {
+            self.used_bytes = self.used_bytes.saturating_sub(u64::from(block.size_bytes));
+            self.free_list.push(block_id);
+            metrics::gauge!(names::BLOCK_MANAGER_USED_BYTES).set(self.used_bytes as f64);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn blocks_for_request(&self, req_id: u64) -> Vec<u32> {
+        self.blocks
+            .values()
+            .filter(|b| b.req_id == req_id)
+            .map(|b| b.block_id)
+            .collect()
     }
 
     fn demote_think_blocks(&mut self, req_id: u64) {
