@@ -62,7 +62,7 @@ jobs:
           mkdir -p site/api
           cp -R target/doc/* site/api/
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
