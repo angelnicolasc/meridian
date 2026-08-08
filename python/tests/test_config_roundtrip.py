@@ -53,3 +53,66 @@ max_think_tokens = 500
 """
     with pytest.raises(ValueError, match="min_think_tokens"):
         MeridianConfig.from_str(bad)
+
+
+# ---------------------------------------------------------------------------
+# [speculation] — ADR-0009
+# ---------------------------------------------------------------------------
+
+
+def test_speculation_defaults_to_off_and_uncalibrated() -> None:
+    cfg = MeridianConfig()
+    assert cfg.speculation.enabled is False
+    assert cfg.speculation.acceptance_prior is None
+    assert cfg.speculation.baseline_proposal_len == 7
+
+
+@pytest.mark.skipif(not EXAMPLE.exists(), reason="meridian.toml.example not present")
+def test_example_ships_speculation_disabled_and_unmeasured() -> None:
+    cfg = MeridianConfig.from_path(EXAMPLE)
+    assert cfg.speculation.enabled is False
+    assert cfg.speculation.acceptance_prior is None, (
+        "the shipped example must not carry acceptance rates: no phase-segmented "
+        "measurement exists yet"
+    )
+
+
+def test_speculation_accepts_a_fully_attributed_prior() -> None:
+    good = """
+[speculation]
+enabled = true
+
+[speculation.acceptance_prior]
+think            = 0.42
+output           = 0.88
+harness          = "DeepSpec@deadbeef"
+draft_checkpoint = "deepseek-ai/dspark_qwen3_4b_block7"
+target_model     = "Qwen/Qwen3-4B"
+thinking_mode    = true
+recorded_on      = "2026-08-07"
+"""
+    cfg = MeridianConfig.from_str(good)
+    prior = cfg.speculation.acceptance_prior
+    assert prior is not None
+    assert prior.think < prior.output
+    assert prior.target_model == "Qwen/Qwen3-4B"
+
+
+def test_speculation_rejects_rates_without_provenance() -> None:
+    bad = """
+[speculation.acceptance_prior]
+think  = 0.42
+output = 0.88
+"""
+    with pytest.raises(ValueError, match=r"harness|Field required"):
+        MeridianConfig.from_str(bad)
+
+
+def test_speculation_rejects_inverted_proposal_bounds() -> None:
+    bad = """
+[speculation]
+min_proposal_len = 9
+max_proposal_len = 4
+"""
+    with pytest.raises(ValueError, match="proposal_len"):
+        MeridianConfig.from_str(bad)

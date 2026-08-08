@@ -16,6 +16,12 @@ use std::sync::Mutex;
 
 use meridian_core::block_manager::{BlockManager, PhaseAwareBlockManager};
 use meridian_core::config::{MeridianConfig as CoreConfig, SchedulerConfig as CoreSchedConfig};
+use meridian_core::dspark_bridge::{
+    AcceptanceLedger as CoreLedger, AcceptanceObservation as CoreObservation,
+    AcceptancePrior as CoreAcceptancePrior, DraftCostModel as CoreCostModel,
+    PhaseConditioningConfig as CoreHookConfig, PhaseConditioningHook as CoreHook,
+    Provenance as CoreProvenance, SpeculationPhase, StraddlePolicy as CoreStraddlePolicy,
+};
 use meridian_core::phase_router::{
     PhaseRouter as CoreRouter, PhaseRouterConfig as CoreRouterConfig,
 };
@@ -494,6 +500,338 @@ impl PyBlockManager {
 }
 
 // ---------------------------------------------------------------------------
+// Phase-conditioned speculative decoding (ADR-0009)
+// ---------------------------------------------------------------------------
+
+fn phase_from_str(s: &str) -> PyResult<SpeculationPhase> {
+    match s {
+        "prefill" => Ok(SpeculationPhase::Prefill),
+        // Accept the router's own `phase_of_kind` vocabulary as well as the
+        // short form, so callers can pass either through without translating.
+        "think" | "think_decode" => Ok(SpeculationPhase::Think),
+        "output" | "output_decode" => Ok(SpeculationPhase::Output),
+        "complete" => Ok(SpeculationPhase::Complete),
+        other => Err(PyValueError::new_err(format!(
+            "unknown speculation phase: {other}"
+        ))),
+    }
+}
+
+/// Phase-conditioning hook: phase label plus optional entropy sample in,
+/// recommended draft parameters out.
+///
+/// Constructed uncalibrated. A hook built this way can only ever *reduce* the
+/// baseline draft depth — see `meridian_core::dspark_bridge::hook`. Supply a
+/// measured prior through `with_measured_prior` to unlock phase conditioning.
+#[pyclass(name = "PhaseConditioningHook", module = "meridian._meridian")]
+#[derive(Debug)]
+pub struct PyPhaseConditioningHook {
+    inner: CoreHook,
+}
+
+#[pymethods]
+impl PyPhaseConditioningHook {
+    #[new]
+    #[pyo3(signature = (
+        baseline_proposal_len = 7,
+        min_proposal_len = 1,
+        max_proposal_len = 7,
+        vocab_size = 151_936,
+        use_entropy_ceiling = true,
+        draft_token_us = 40.0,
+        verify_fixed_us = 900.0,
+        verify_token_us = 25.0,
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        baseline_proposal_len: u32,
+        min_proposal_len: u32,
+        max_proposal_len: u32,
+        vocab_size: u32,
+        use_entropy_ceiling: bool,
+        draft_token_us: f32,
+        verify_fixed_us: f32,
+        verify_token_us: f32,
+    ) -> PyResult<Self> {
+        let config = CoreHookConfig {
+            baseline_proposal_len,
+            min_proposal_len,
+            max_proposal_len,
+            vocab_size,
+            cost: CoreCostModel {
+                draft_token_us,
+                verify_fixed_us,
+                verify_token_us,
+            },
+            prior: CoreAcceptancePrior::Uncalibrated,
+            use_entropy_ceiling,
+        };
+        Ok(Self {
+            inner: CoreHook::new(config).map_err(|e| PyValueError::new_err(format!("{e}")))?,
+        })
+    }
+
+    /// Return a copy of this hook calibrated with measured per-phase acceptance
+    /// rates. Every provenance argument is required: numbers without the run
+    /// that produced them are rejected.
+    #[pyo3(signature = (
+        think,
+        output,
+        harness,
+        draft_checkpoint,
+        target_model,
+        thinking_mode,
+        recorded_on,
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn with_measured_prior(
+        &self,
+        think: f32,
+        output: f32,
+        harness: String,
+        draft_checkpoint: String,
+        target_model: String,
+        thinking_mode: bool,
+        recorded_on: String,
+    ) -> PyResult<Self> {
+        let prior = CoreAcceptancePrior::measured(
+            think,
+            output,
+            CoreProvenance::Measured {
+                harness,
+                draft_checkpoint,
+                target_model,
+                thinking_mode,
+                recorded_on,
+            },
+        )
+        .map_err(|e| PyValueError::new_err(format!("{e}")))?;
+
+        let config = CoreHookConfig {
+            prior,
+            ..self.inner.config().clone()
+        };
+        Ok(Self {
+            inner: CoreHook::new(config).map_err(|e| PyValueError::new_err(format!("{e}")))?,
+        })
+    }
+
+    /// Recommend draft parameters. Returns a dict with `proposal_len`,
+    /// `basis`, `planning_acceptance`, and `expected_accepted_length`.
+    #[pyo3(signature = (phase, entropy_signal = None))]
+    fn policy_for(
+        &self,
+        py: Python<'_>,
+        phase: &str,
+        entropy_signal: Option<PyEntropySignal>,
+    ) -> PyResult<PyObject> {
+        let phase = phase_from_str(phase)?;
+        let policy = match entropy_signal {
+            Some(s) => self.inner.policy_for(phase, Some(&s.inner)),
+            None => self.inner.policy_for(phase, None),
+        };
+        let d = PyDict::new(py);
+        d.set_item("proposal_len", policy.proposal_len)?;
+        d.set_item("basis", policy.basis.as_label())?;
+        d.set_item("planning_acceptance", policy.planning_acceptance)?;
+        d.set_item("expected_accepted_length", policy.expected_accepted_length)?;
+        Ok(d.into())
+    }
+
+    #[getter]
+    fn is_calibrated(&self) -> bool {
+        self.inner.is_calibrated()
+    }
+
+    #[getter]
+    fn baseline_proposal_len(&self) -> u32 {
+        self.inner.config().baseline_proposal_len
+    }
+}
+
+/// Phase-segmented accumulator over speculative-decoding verification steps.
+///
+/// Construct with `AcceptanceLedger.synthetic(fixture)` for fixtures and
+/// simulations, or `AcceptanceLedger.measured(...)` for real runs. Only the
+/// latter can produce a publishable claim.
+#[pyclass(name = "AcceptanceLedger", module = "meridian._meridian")]
+#[derive(Debug)]
+pub struct PyAcceptanceLedger {
+    inner: Mutex<CoreLedger>,
+}
+
+impl PyAcceptanceLedger {
+    fn locked(&self) -> PyResult<std::sync::MutexGuard<'_, CoreLedger>> {
+        self.inner
+            .lock()
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+}
+
+#[pymethods]
+impl PyAcceptanceLedger {
+    /// A ledger for synthetic data. Nothing recorded here can be published.
+    #[staticmethod]
+    #[pyo3(signature = (fixture, straddle_policy = "exclude"))]
+    fn synthetic(fixture: &str, straddle_policy: &str) -> PyResult<Self> {
+        Self::build(CoreProvenance::synthetic(fixture), straddle_policy)
+    }
+
+    /// A ledger for a real run. Every provenance argument is required.
+    #[staticmethod]
+    #[pyo3(signature = (
+        harness,
+        draft_checkpoint,
+        target_model,
+        thinking_mode,
+        recorded_on,
+        straddle_policy = "exclude",
+    ))]
+    fn measured(
+        harness: String,
+        draft_checkpoint: String,
+        target_model: String,
+        thinking_mode: bool,
+        recorded_on: String,
+        straddle_policy: &str,
+    ) -> PyResult<Self> {
+        Self::build(
+            CoreProvenance::Measured {
+                harness,
+                draft_checkpoint,
+                target_model,
+                thinking_mode,
+                recorded_on,
+            },
+            straddle_policy,
+        )
+    }
+
+    /// Fold one verification step in.
+    #[pyo3(signature = (phase, accepted_length, proposal_length, straddles_boundary = false))]
+    fn record(
+        &self,
+        phase: &str,
+        accepted_length: u32,
+        proposal_length: u32,
+        straddles_boundary: bool,
+    ) -> PyResult<()> {
+        let observation = if straddles_boundary {
+            CoreObservation::straddling(accepted_length, proposal_length)
+        } else {
+            CoreObservation::new(phase_from_str(phase)?, accepted_length, proposal_length)
+        };
+        self.locked()?.record(&observation);
+        Ok(())
+    }
+
+    /// Per-phase summary plus the Welch comparison, as a dict.
+    fn report(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let report = self.locked()?.report();
+        let d = PyDict::new(py);
+        d.set_item("provenance", report.provenance.as_label())?;
+        d.set_item("banner", report.provenance.banner())?;
+        d.set_item("straddle_policy", report.straddle_policy.as_label())?;
+        d.set_item("straddling_steps", report.straddling_steps)?;
+        d.set_item("straddle_rate", report.straddle_rate)?;
+        for (key, stats) in [("think", &report.think), ("output", &report.output)] {
+            let phase = PyDict::new(py);
+            phase.set_item("steps", stats.step_count())?;
+            phase.set_item("mean_accepted_length", stats.mean_accepted_length())?;
+            phase.set_item("std_dev_accepted_length", stats.std_dev_accepted_length())?;
+            phase.set_item("token_acceptance_rate", stats.token_acceptance_rate())?;
+            d.set_item(key, phase)?;
+        }
+        match report.welch {
+            Some(w) => {
+                let welch = PyDict::new(py);
+                welch.set_item("mean_difference", w.mean_difference)?;
+                welch.set_item("std_error", w.std_error)?;
+                welch.set_item("t_statistic", w.t_statistic)?;
+                welch.set_item("degrees_of_freedom", w.degrees_of_freedom)?;
+                welch.set_item("p_value", w.p_value)?;
+                welch.set_item("cohens_d", w.cohens_d)?;
+                welch.set_item("ci95_lower", w.ci95_lower())?;
+                welch.set_item("ci95_upper", w.ci95_upper())?;
+                d.set_item("welch", welch)?;
+            }
+            None => d.set_item("welch", py.None())?,
+        }
+        Ok(d.into())
+    }
+
+    /// Evaluate the phase-gap hypothesis against a between-domain baseline.
+    #[pyo3(signature = (between_domain_gap = 0.0))]
+    fn verdict(&self, between_domain_gap: f64) -> PyResult<&'static str> {
+        Ok(self
+            .locked()?
+            .report()
+            .verdict(between_domain_gap)
+            .as_label())
+    }
+
+    /// Human-readable report, opening with the provenance banner.
+    fn render(&self) -> PyResult<String> {
+        Ok(self.locked()?.report().to_string())
+    }
+
+    /// Promote to a publishable claim. Raises `ValueError` for synthetic data
+    /// or for a statistic that is undefined.
+    fn measured_claim(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let claim = self
+            .locked()?
+            .report()
+            .into_measured_claim()
+            .map_err(|e| PyValueError::new_err(format!("{e}")))?;
+        let d = PyDict::new(py);
+        d.set_item("harness", claim.run.harness)?;
+        d.set_item("draft_checkpoint", claim.run.draft_checkpoint)?;
+        d.set_item("target_model", claim.run.target_model)?;
+        d.set_item("thinking_mode", claim.run.thinking_mode)?;
+        d.set_item("recorded_on", claim.run.recorded_on)?;
+        d.set_item(
+            "think_mean_accepted_length",
+            claim.think_mean_accepted_length,
+        )?;
+        d.set_item(
+            "output_mean_accepted_length",
+            claim.output_mean_accepted_length,
+        )?;
+        d.set_item("straddle_rate", claim.straddle_rate)?;
+        Ok(d.into())
+    }
+
+    fn __repr__(&self) -> PyResult<String> {
+        let ledger = self.locked()?;
+        Ok(format!(
+            "AcceptanceLedger(provenance={}, think_steps={}, output_steps={}, straddling={})",
+            ledger.provenance().as_label(),
+            ledger.think().step_count(),
+            ledger.output().step_count(),
+            ledger.straddling_steps(),
+        ))
+    }
+}
+
+impl PyAcceptanceLedger {
+    fn build(provenance: CoreProvenance, straddle_policy: &str) -> PyResult<Self> {
+        let policy = match straddle_policy {
+            "exclude" => CoreStraddlePolicy::Exclude,
+            "attribute_to_think" => CoreStraddlePolicy::AttributeToThink,
+            "attribute_to_output" => CoreStraddlePolicy::AttributeToOutput,
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "unknown straddle policy: {other}"
+                )));
+            }
+        };
+        Ok(Self {
+            inner: Mutex::new(CoreLedger::new(provenance).with_straddle_policy(policy)),
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
 // MeridianConfig loader
 // ---------------------------------------------------------------------------
 
@@ -538,6 +876,8 @@ fn _meridian(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyEntropySignal>()?;
     m.add_class::<PyMeridianScheduler>()?;
     m.add_class::<PyBlockManager>()?;
+    m.add_class::<PyPhaseConditioningHook>()?;
+    m.add_class::<PyAcceptanceLedger>()?;
     m.add_function(wrap_pyfunction!(load_config, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())

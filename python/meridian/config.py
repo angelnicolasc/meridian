@@ -80,6 +80,61 @@ class DisaggConfig(BaseModel):
         return self
 
 
+class MeasuredPriorSpec(BaseModel):
+    """Measured per-phase acceptance rates, with the provenance of the run.
+
+    Every field is required. Acceptance rates without a description of the run
+    that produced them are not admissible input — the schema deliberately has
+    no way to express a hand-tuned prior, so phase conditioning cannot be
+    switched on by a hunch. See ADR-0009.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    think: Annotated[float, Field(ge=0.0, le=1.0)]
+    output: Annotated[float, Field(ge=0.0, le=1.0)]
+    harness: Annotated[str, Field(min_length=1)]
+    draft_checkpoint: Annotated[str, Field(min_length=1)]
+    target_model: Annotated[str, Field(min_length=1)]
+    thinking_mode: bool
+    recorded_on: Annotated[str, Field(min_length=1)]
+
+
+class SpeculationConfig(BaseModel):
+    """Phase-conditioned speculative decoding (ADR-0009).
+
+    Off by default, and inert even when enabled until ``acceptance_prior`` is
+    supplied: without a measurement the hook may only ever *reduce* the
+    baseline draft depth, never raise it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    baseline_proposal_len: Annotated[int, Field(ge=1)] = 7
+    min_proposal_len: Annotated[int, Field(ge=0)] = 1
+    max_proposal_len: Annotated[int, Field(ge=1)] = 7
+    vocab_size: Annotated[int, Field(ge=2)] = 151_936
+    use_entropy_ceiling: bool = True
+    draft_token_us: Annotated[float, Field(ge=0.0)] = 40.0
+    verify_fixed_us: Annotated[float, Field(gt=0.0)] = 900.0
+    verify_token_us: Annotated[float, Field(ge=0.0)] = 25.0
+    acceptance_prior: MeasuredPriorSpec | None = None
+
+    @model_validator(mode="after")
+    def _check_proposal_bounds(self) -> SpeculationConfig:
+        if self.min_proposal_len > self.max_proposal_len:
+            msg = "speculation.min_proposal_len must be <= max_proposal_len"
+            raise ValueError(msg)
+        if not (self.min_proposal_len <= self.baseline_proposal_len <= self.max_proposal_len):
+            msg = (
+                "speculation.baseline_proposal_len must lie within "
+                "[min_proposal_len, max_proposal_len]"
+            )
+            raise ValueError(msg)
+        return self
+
+
 class ModelConfig(BaseModel):
     """Per-model token-boundary and parser configuration."""
 
@@ -115,6 +170,7 @@ class MeridianConfig(BaseModel):
     entropy: EntropyConfig = Field(default_factory=EntropyConfig)
     kv_memory: KvConfig = Field(default_factory=KvConfig)
     disagg: DisaggConfig = Field(default_factory=DisaggConfig)
+    speculation: SpeculationConfig = Field(default_factory=SpeculationConfig)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     model: dict[str, ModelConfig] = Field(default_factory=dict)
 
