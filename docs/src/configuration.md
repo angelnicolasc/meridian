@@ -377,9 +377,11 @@ phase conditioning cannot be switched on by a hunch. Partial or blank provenance
 is rejected by both parsers.
 
 ```toml
+# ILLUSTRATIVE placeholders showing the shape of the table. These are not
+# measurements — no phase-segmented run exists yet.
 [speculation.acceptance_prior]
-think            = 0.42
-output           = 0.88
+think            = 0.42   # <- the measured think-phase acceptance rate
+output           = 0.88   # <- the measured output-phase acceptance rate
 harness          = "DeepSpec@<commit-sha>"
 draft_checkpoint = "deepseek-ai/dspark_qwen3_4b_block7"
 target_model     = "Qwen/Qwen3-4B"

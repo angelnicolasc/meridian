@@ -183,9 +183,11 @@ let hook = PhaseConditioningHook::new(PhaseConditioningConfig {
 or equivalently in `meridian.toml`:
 
 ```toml
+# Values below are ILLUSTRATIVE placeholders showing the shape of the table.
+# They are not measurements — no phase-segmented run exists.
 [speculation.acceptance_prior]
-think            = 0.42   # from the run
-output           = 0.88   # from the run
+think            = 0.42   # <- replace with the measured think-phase rate
+output           = 0.88   # <- replace with the measured output-phase rate
 harness          = "DeepSpec@<commit-sha>"
 draft_checkpoint = "deepseek-ai/dspark_qwen3_4b_block7"
 target_model     = "Qwen/Qwen3-4B"

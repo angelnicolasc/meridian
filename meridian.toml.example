@@ -181,9 +181,12 @@ verify_token_us = 25.0
 # measurement exists yet — see docs/src/notes/phase-1-protocol.md for how to
 # produce one. Every field is required; partial provenance is rejected.
 #
+# The rates below are ILLUSTRATIVE placeholders showing the shape of the
+# table. They are not measurements.
+#
 # [speculation.acceptance_prior]
-# think            = 0.42
-# output           = 0.88
+# think            = 0.42   # <- the measured think-phase acceptance rate
+# output           = 0.88   # <- the measured output-phase acceptance rate
 # harness          = "DeepSpec@<commit-sha>"
 # draft_checkpoint = "deepseek-ai/dspark_qwen3_4b_block7"
 # target_model     = "Qwen/Qwen3-4B"
