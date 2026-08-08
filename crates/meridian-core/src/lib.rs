@@ -25,6 +25,10 @@
 //!   Contracts in place; dispatch logic lands in Sprint 1.
 //! - [`block_manager`] — three-tier KV block manager. Contracts in place; tier-aware
 //!   eviction logic lands in Sprint 1.
+//! - [`dspark_bridge`] — phase-conditioned speculative decoding: the formal
+//!   comparison between Meridian's entropy signals and a DSpark-class
+//!   confidence head, plus a scheduler hook that ships deliberately inert
+//!   until a phase-segmented measurement exists.
 //! - [`config`] — TOML-driven configuration with validated defaults.
 //! - [`types`] — shared domain types: `ThinkPhase`, `PhaseEvent`, `BlockTier`,
 //!   `EntropySignal`, `RequestSlot`, `ScheduledBatch`.
@@ -49,6 +53,7 @@
 
 pub mod block_manager;
 pub mod config;
+pub mod dspark_bridge;
 pub mod error;
 pub mod metrics;
 pub mod phase_router;
@@ -59,8 +64,12 @@ pub mod types;
 
 pub use crate::block_manager::{BlockManager, PhaseAwareBlockManager};
 pub use crate::config::{
-    CapacitySpec, DisaggConfig, DisaggFabric, EntropyConfig, KvConfig, MeridianConfig, ModelConfig,
-    SchedulerConfig,
+    CapacitySpec, DisaggConfig, DisaggFabric, EntropyConfig, KvConfig, MeasuredPriorSpec,
+    MeridianConfig, ModelConfig, SchedulerConfig, SpeculationConfig,
+};
+pub use crate::dspark_bridge::{
+    AcceptanceLedger, AcceptanceObservation, AcceptancePrior, DraftPolicy, HypothesisVerdict,
+    PhaseConditioningConfig, PhaseConditioningHook, PhaseGapReport, Provenance, SpeculationPhase,
 };
 pub use crate::error::{Error, Result};
 pub use crate::phase_router::{PhaseRouter, PhaseRouterConfig};

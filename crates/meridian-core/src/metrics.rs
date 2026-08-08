@@ -19,6 +19,10 @@
 //! | `meridian.block_manager.used_bytes`        | gauge     | Total bytes currently allocated across all tiers.             |
 //! | `meridian.block_manager.evictions{tier=...}` | counter | Eviction events per source tier.                              |
 //! | `meridian.scheduler.batch_size{phase=...}` | histogram | Slot count per scheduled batch, split by phase.               |
+//! | `meridian.speculation.policy_basis{phase,basis}` | counter | Phase-conditioning decisions, by what authority they rest on. |
+//! | `meridian.speculation.proposal_len{phase=...}` | histogram | Recommended draft depth per decision.                       |
+//! | `meridian.speculation.accepted_length{phase=...}` | histogram | Observed accepted draft length per verification step.     |
+//! | `meridian.speculation.straddling_steps`    | counter   | Verification steps spanning the `</think>` boundary.          |
 //!
 //! Re-exports [`BudgetForceReason`](crate::types::BudgetForceReason) for
 //! ergonomic access at metric call sites.
@@ -58,4 +62,25 @@ pub mod names {
 
     /// Histogram of slot count per scheduled batch. Tagged with `phase=output|think`.
     pub const SCHEDULER_BATCH_SIZE: &str = "meridian.scheduler.batch_size";
+
+    /// Counter of phase-conditioning decisions, tagged with
+    /// `phase=think|output|prefill|complete` and
+    /// `basis=baseline|not_decoding|entropy_ceiling|measured_prior|measured_prior_capped_by_entropy`.
+    ///
+    /// Until Phase 1 of the phase-conditioned-speculation work has run, a
+    /// healthy deployment shows **zero** samples with a `measured_*` basis —
+    /// see [`crate::dspark_bridge::hook`].
+    pub const SPECULATION_POLICY_BASIS: &str = "meridian.speculation.policy_basis";
+
+    /// Histogram of recommended draft proposal length, tagged with `phase=...`.
+    pub const SPECULATION_PROPOSAL_LEN: &str = "meridian.speculation.proposal_len";
+
+    /// Histogram of observed accepted draft length per verification step,
+    /// tagged with `phase=think|output`.
+    pub const SPECULATION_ACCEPTED_LENGTH: &str = "meridian.speculation.accepted_length";
+
+    /// Counter of verification steps whose committed span crossed the
+    /// `</think>` boundary. A rising share of these means phase attribution is
+    /// too coarse to trust.
+    pub const SPECULATION_STRADDLING_STEPS: &str = "meridian.speculation.straddling_steps";
 }

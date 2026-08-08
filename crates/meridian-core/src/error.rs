@@ -67,6 +67,49 @@ pub enum Error {
     #[error("no disagg fabric configured (compile with --features nixl, or wire a fabric)")]
     DisaggUnavailable,
 
+    /// A synthetic trace was used where a real measurement is required.
+    ///
+    /// Produced by [`crate::dspark_bridge::Provenance::into_measured`] and by
+    /// every path that promotes a statistic to a publishable claim. See
+    /// [`crate::dspark_bridge::provenance`] for why this is a hard error
+    /// rather than a warning.
+    #[error(
+        "refusing to treat synthetic trace {fixture:?} as a measurement \
+         (see dspark_bridge::provenance)"
+    )]
+    SyntheticProvenance {
+        /// Name of the fixture that produced the synthetic trace.
+        fixture: String,
+    },
+
+    /// Two acceptance ledgers with different provenance were merged.
+    #[error("cannot merge ledgers of differing provenance: {left} into {right}")]
+    ProvenanceMismatch {
+        /// Provenance label of the ledger being merged into.
+        left: &'static str,
+        /// Provenance label of the ledger being merged from.
+        right: &'static str,
+    },
+
+    /// Two acceptance ledgers with different boundary-straddle policies were
+    /// merged. Their phase arms were built under incompatible attribution
+    /// rules, so the combined statistic would be meaningless.
+    #[error("cannot merge ledgers with differing straddle policies: {left} into {right}")]
+    StraddlePolicyMismatch {
+        /// Straddle policy of the ledger being merged into.
+        left: &'static str,
+        /// Straddle policy of the ledger being merged from.
+        right: &'static str,
+    },
+
+    /// A phase-segmented statistic was requested for a phase with too few
+    /// observations for it to be defined.
+    #[error("insufficient observations to compute the statistic for phase {phase}")]
+    InsufficientObservations {
+        /// Which phase arm was short of data.
+        phase: &'static str,
+    },
+
     /// A checksum mismatch was detected when ingesting a block from a fabric.
     #[error(
         "block payload checksum mismatch on ingest (expected {expected:032x}, got {actual:032x})"
