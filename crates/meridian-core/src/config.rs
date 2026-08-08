@@ -38,6 +38,10 @@ pub struct MeridianConfig {
     #[serde(default)]
     pub disagg: DisaggConfig,
 
+    /// Phase-conditioned speculative decoding (ADR-0009). Off by default.
+    #[serde(default)]
+    pub speculation: SpeculationConfig,
+
     /// Per-model token-boundary and parser configuration. Keyed by model name
     /// (e.g. `"deepseek_r1"`).
     #[serde(default)]
@@ -68,6 +72,7 @@ impl MeridianConfig {
         self.entropy.validate()?;
         self.kv_memory.validate()?;
         self.disagg.validate()?;
+        self.speculation.validate()?;
         Ok(())
     }
 }
@@ -79,6 +84,7 @@ impl Default for MeridianConfig {
             entropy: EntropyConfig::default(),
             kv_memory: KvConfig::default(),
             disagg: DisaggConfig::default(),
+            speculation: SpeculationConfig::default(),
             model: std::collections::BTreeMap::new(),
         }
     }
@@ -435,6 +441,194 @@ impl DisaggFabric {
             Self::Mooncake => "mooncake",
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Speculation section — ADR-0009
+// ---------------------------------------------------------------------------
+
+/// Phase-conditioned speculative decoding settings.
+///
+/// Off by default, and inert even when enabled until
+/// `[speculation.acceptance_prior]` is supplied — see
+/// [`crate::dspark_bridge::hook`] for why that posture is deliberate.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct SpeculationConfig {
+    /// Master switch. When `false` the serving stack never consults the hook.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Draft depth the serving stack would use without the hook. Also the
+    /// ceiling on what an uncalibrated hook may return.
+    #[serde(default = "default_baseline_proposal_len")]
+    pub baseline_proposal_len: u32,
+
+    /// Floor on recommended draft depth.
+    #[serde(default = "default_min_proposal_len")]
+    pub min_proposal_len: u32,
+
+    /// Ceiling on recommended draft depth, bounded by the drafter's block size.
+    #[serde(default = "default_baseline_proposal_len")]
+    pub max_proposal_len: u32,
+
+    /// Target-model vocabulary size, needed for the entropy bound.
+    #[serde(default = "default_vocab_size")]
+    pub vocab_size: u32,
+
+    /// Whether to derive a draft-depth ceiling from the entropy probe.
+    #[serde(default = "default_true")]
+    pub use_entropy_ceiling: bool,
+
+    /// Marginal microseconds to draft one additional token.
+    #[serde(default = "default_draft_token_us")]
+    pub draft_token_us: f32,
+
+    /// Fixed microseconds per verification pass.
+    #[serde(default = "default_verify_fixed_us")]
+    pub verify_fixed_us: f32,
+
+    /// Marginal microseconds to verify one additional position.
+    #[serde(default = "default_verify_token_us")]
+    pub verify_token_us: f32,
+
+    /// Measured per-phase acceptance rates. Absent until a Phase 1 run exists.
+    ///
+    /// There is deliberately **no way to express an unmeasured prior in
+    /// configuration**: the schema requires the full provenance of a real run
+    /// alongside the numbers, so an operator cannot hand-tune their way into
+    /// phase conditioning on a hunch.
+    #[serde(default)]
+    pub acceptance_prior: Option<MeasuredPriorSpec>,
+}
+
+const fn default_baseline_proposal_len() -> u32 {
+    // DeepSpec's released DSpark Qwen3 checkpoints are `block7`.
+    7
+}
+const fn default_min_proposal_len() -> u32 {
+    1
+}
+const fn default_vocab_size() -> u32 {
+    // Qwen3.
+    151_936
+}
+const fn default_true() -> bool {
+    true
+}
+const fn default_draft_token_us() -> f32 {
+    40.0
+}
+const fn default_verify_fixed_us() -> f32 {
+    900.0
+}
+const fn default_verify_token_us() -> f32 {
+    25.0
+}
+
+impl Default for SpeculationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            baseline_proposal_len: default_baseline_proposal_len(),
+            min_proposal_len: default_min_proposal_len(),
+            max_proposal_len: default_baseline_proposal_len(),
+            vocab_size: default_vocab_size(),
+            use_entropy_ceiling: true,
+            draft_token_us: default_draft_token_us(),
+            verify_fixed_us: default_verify_fixed_us(),
+            verify_token_us: default_verify_token_us(),
+            acceptance_prior: None,
+        }
+    }
+}
+
+impl SpeculationConfig {
+    /// Build the runtime hook configuration this section describes.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ConfigValidation`] if any field or cross-field invariant is
+    /// violated, propagated from
+    /// [`PhaseConditioningConfig::validate`](crate::dspark_bridge::PhaseConditioningConfig::validate).
+    pub fn to_hook_config(&self) -> Result<crate::dspark_bridge::PhaseConditioningConfig> {
+        use crate::dspark_bridge::{
+            AcceptancePrior, DraftCostModel, PhaseConditioningConfig, Provenance,
+        };
+
+        let prior = match &self.acceptance_prior {
+            None => AcceptancePrior::Uncalibrated,
+            Some(spec) => AcceptancePrior::measured(
+                spec.think,
+                spec.output,
+                Provenance::Measured {
+                    harness: spec.harness.clone(),
+                    draft_checkpoint: spec.draft_checkpoint.clone(),
+                    target_model: spec.target_model.clone(),
+                    thinking_mode: spec.thinking_mode,
+                    recorded_on: spec.recorded_on.clone(),
+                },
+            )?,
+        };
+
+        let config = PhaseConditioningConfig {
+            baseline_proposal_len: self.baseline_proposal_len,
+            min_proposal_len: self.min_proposal_len,
+            max_proposal_len: self.max_proposal_len,
+            vocab_size: self.vocab_size,
+            cost: DraftCostModel {
+                draft_token_us: self.draft_token_us,
+                verify_fixed_us: self.verify_fixed_us,
+                verify_token_us: self.verify_token_us,
+            },
+            prior,
+            use_entropy_ceiling: self.use_entropy_ceiling,
+        };
+        config.validate()?;
+        Ok(config)
+    }
+
+    fn validate(&self) -> Result<()> {
+        if let Some(spec) = &self.acceptance_prior {
+            if spec.harness.trim().is_empty()
+                || spec.draft_checkpoint.trim().is_empty()
+                || spec.target_model.trim().is_empty()
+                || spec.recorded_on.trim().is_empty()
+            {
+                return Err(Error::ConfigValidation {
+                    field: "speculation.acceptance_prior",
+                    reason: "every provenance field must be a non-empty description of the run \
+                             that produced the numbers"
+                        .into(),
+                });
+            }
+        }
+        self.to_hook_config().map(|_| ())
+    }
+}
+
+/// Measured per-phase acceptance rates, with the provenance of the run that
+/// produced them.
+///
+/// Every field is required. Numbers without a run description are not
+/// admissible input — see [`crate::dspark_bridge::provenance`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct MeasuredPriorSpec {
+    /// Measured mean token acceptance rate during the think phase.
+    pub think: f32,
+    /// Measured mean token acceptance rate during the output phase.
+    pub output: f32,
+    /// Evaluation harness and version, e.g. `"DeepSpec@<sha>"`.
+    pub harness: String,
+    /// Draft checkpoint the rates were measured against.
+    pub draft_checkpoint: String,
+    /// Target model the rates were measured against.
+    pub target_model: String,
+    /// Whether the target ran with thinking mode enabled.
+    pub thinking_mode: bool,
+    /// ISO-8601 date the run was recorded.
+    pub recorded_on: String,
 }
 
 // ---------------------------------------------------------------------------

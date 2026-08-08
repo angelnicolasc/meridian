@@ -130,6 +130,68 @@ offload_threshold_blocks = 4
 
 
 # ---------------------------------------------------------------------------
+# [speculation]
+# Phase-conditioned speculative decoding (ADR-0009). Off by default.
+#
+# Read this before enabling it. The hypothesis this section exists to act on —
+# that draft acceptance is lower during the think phase, because DeepSpec's
+# released Qwen3 drafters were trained only on non-thinking-mode generations —
+# has NOT been measured. So the hook ships deliberately half-inert:
+#
+#   * with no `[speculation.acceptance_prior]`, it can only ever *reduce* the
+#     baseline draft depth, and only where the entropy probe proves a deeper
+#     draft cannot pay off;
+#   * only a measured prior unlocks upward adjustment.
+#
+# There is no way to express acceptance rates in this file without also stating
+# which run produced them. That is intentional.
+# ---------------------------------------------------------------------------
+[speculation]
+
+# Master switch. When false the serving stack never consults the hook.
+enabled = false
+
+# Draft depth the serving stack would use without the hook. Also the ceiling on
+# what an uncalibrated hook may return. DeepSpec's released DSpark Qwen3
+# checkpoints are `block7`, hence 7.
+baseline_proposal_len = 7
+
+# Bounds on the recommended draft depth. `max_proposal_len` must not exceed the
+# drafter's block size — proposing past it is not something the drafter can do.
+min_proposal_len = 1
+max_proposal_len = 7
+
+# Target-model vocabulary size, needed for the entropy-derived acceptance
+# ceiling. 151936 is Qwen3's.
+vocab_size = 151936
+
+# Whether to derive a draft-depth ceiling from the entropy probe. Setting this
+# false makes an uncalibrated hook a strict no-op — the most conservative
+# posture available.
+use_entropy_ceiling = true
+
+# Cycle cost model, in microseconds. Defaults produce sane relative ordering;
+# they are not a claim about any particular hardware. Profile your deployment
+# and replace them.
+draft_token_us  = 40.0
+verify_fixed_us = 900.0
+verify_token_us = 25.0
+
+# Measured per-phase acceptance rates. Commented out because no such
+# measurement exists yet — see docs/src/notes/phase-1-protocol.md for how to
+# produce one. Every field is required; partial provenance is rejected.
+#
+# [speculation.acceptance_prior]
+# think            = 0.42
+# output           = 0.88
+# harness          = "DeepSpec@<commit-sha>"
+# draft_checkpoint = "deepseek-ai/dspark_qwen3_4b_block7"
+# target_model     = "Qwen/Qwen3-4B"
+# thinking_mode    = true
+# recorded_on      = "2026-08-07"
+
+
+# ---------------------------------------------------------------------------
 # [telemetry]
 # OpenTelemetry OTLP export. Off by default — Prometheus is the primary metric
 # surface. When enabled the plugin also exports its counters to an OTLP

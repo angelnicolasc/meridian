@@ -67,6 +67,125 @@ min_think_tokens       = 500
     assert!(msg.contains("min_think_tokens"), "unexpected error: {msg}");
 }
 
+// ---------------------------------------------------------------------------
+// [speculation] — ADR-0009
+// ---------------------------------------------------------------------------
+
+#[test]
+fn speculation_section_defaults_to_off_and_uncalibrated() {
+    let cfg = MeridianConfig::default();
+    assert!(!cfg.speculation.enabled);
+    assert!(cfg.speculation.acceptance_prior.is_none());
+
+    let hook = cfg
+        .speculation
+        .to_hook_config()
+        .expect("defaults are valid");
+    assert!(!hook.prior.is_calibrated());
+    assert_eq!(hook.baseline_proposal_len, 7);
+}
+
+#[test]
+fn speculation_section_parses() {
+    let input = r#"
+[speculation]
+enabled               = true
+baseline_proposal_len = 5
+min_proposal_len      = 2
+max_proposal_len      = 8
+vocab_size            = 151936
+use_entropy_ceiling   = true
+draft_token_us        = 35.0
+verify_fixed_us       = 850.0
+verify_token_us       = 20.0
+"#;
+    let cfg = MeridianConfig::from_toml_str(input).expect("parse");
+    assert!(cfg.speculation.enabled);
+    assert_eq!(cfg.speculation.baseline_proposal_len, 5);
+    assert_eq!(cfg.speculation.max_proposal_len, 8);
+    assert!(cfg.speculation.acceptance_prior.is_none());
+}
+
+#[test]
+fn speculation_accepts_a_fully_attributed_measured_prior() {
+    let input = r#"
+[speculation]
+enabled = true
+
+[speculation.acceptance_prior]
+think            = 0.42
+output           = 0.88
+harness          = "DeepSpec@deadbeef"
+draft_checkpoint = "deepseek-ai/dspark_qwen3_4b_block7"
+target_model     = "Qwen/Qwen3-4B"
+thinking_mode    = true
+recorded_on      = "2026-08-07"
+"#;
+    let cfg = MeridianConfig::from_toml_str(input).expect("parse");
+    let prior = cfg
+        .speculation
+        .acceptance_prior
+        .as_ref()
+        .expect("prior present");
+    assert_eq!(prior.target_model, "Qwen/Qwen3-4B");
+
+    let hook = cfg.speculation.to_hook_config().expect("valid");
+    assert!(hook.prior.is_calibrated());
+    assert!(hook.prior.phase_gap().expect("gap") < 0.0);
+}
+
+/// A measured prior without the run that produced it is not admissible input.
+/// This is the configuration-level half of the provenance discipline described
+/// in `dspark_bridge::provenance`.
+#[test]
+fn speculation_rejects_acceptance_rates_without_provenance() {
+    let input = r#"
+[speculation.acceptance_prior]
+think  = 0.42
+output = 0.88
+"#;
+    let err = MeridianConfig::from_toml_str(input).expect_err("must reject");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("harness") || msg.contains("missing field"),
+        "unexpected error: {msg}",
+    );
+}
+
+#[test]
+fn speculation_rejects_blank_provenance_fields() {
+    let input = r#"
+[speculation.acceptance_prior]
+think            = 0.42
+output           = 0.88
+harness          = "   "
+draft_checkpoint = "deepseek-ai/dspark_qwen3_4b_block7"
+target_model     = "Qwen/Qwen3-4B"
+thinking_mode    = true
+recorded_on      = "2026-08-07"
+"#;
+    let err = MeridianConfig::from_toml_str(input).expect_err("must reject");
+    assert!(
+        format!("{err}").contains("acceptance_prior"),
+        "unexpected error: {err}",
+    );
+}
+
+#[test]
+fn speculation_rejects_out_of_range_proposal_lengths() {
+    let input = r#"
+[speculation]
+min_proposal_len      = 9
+max_proposal_len      = 4
+baseline_proposal_len = 4
+"#;
+    let err = MeridianConfig::from_toml_str(input).expect_err("must reject");
+    assert!(
+        format!("{err}").contains("proposal_len"),
+        "unexpected error: {err}",
+    );
+}
+
 #[test]
 fn rejects_unknown_fields() {
     let input = r#"
