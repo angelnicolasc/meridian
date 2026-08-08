@@ -47,6 +47,8 @@ Meridian exploits the asymmetry.
 | `MeridianScheduler` dual-queue dispatch | ✓ | — |
 | `PhaseAwareBlockManager` three-tier eviction | ✓ | — |
 | `EntropyProbe` CPU backend (NumPy) | ✓ | — |
+| `dspark_bridge` acceptance bounds, hook, ledger | ✓ | — |
+| Phase-segmented draft acceptance — *measured* | — | — (deferred, [protocol](docs/src/notes/phase-1-protocol.md)) |
 | `meridian-kernels` CUDA kernels — EAT/entropy correctness vs CPU | — | ✓ |
 | vLLM plugin — attach / reorder / inject | ✓ | ✓ |
 | Disagg block manager surface (`offload_block`, `ingest_block`) | ✓ | — |
@@ -102,6 +104,41 @@ Incoming requests
    prefill-decode disaggregation fabrics (NIXL, Mooncake-compatible).
    Documented in [ADR-0006](docs/src/adr/0006-disagg-kv-transfer.md).
 
+6. **Phase-conditioned speculative decoding** — the same phase signal, applied
+   one level down the stack to draft-model scheduling. Backed by
+   [`crates/meridian-core/src/dspark_bridge/`](crates/meridian-core/src/dspark_bridge/)
+   and [ADR-0009](docs/src/adr/0009-phase-conditioned-speculation.md). Off by
+   default, and half-inert by design — see below.
+
+---
+
+## Research: phase-conditioned speculative decoding
+
+DeepSeek's [DeepSpec](https://github.com/deepseek-ai/DeepSpec) ships trained
+speculative-decoding drafters for Qwen3. Its README states each released
+checkpoint was trained on data its target generated **in non-thinking mode** —
+while Qwen3's `enable_thinking` toggle is what production reasoning traffic uses.
+
+That is a documented training/serving mismatch, and it suggests speculative
+decoding's speedup may be silently phase-dependent for these checkpoints.
+
+**What is proved** ([note](docs/src/notes/phase-conditioned-speculation.md)):
+Meridian's EAT signal *is* DSpark's confidence-head supervision target for a
+specific drafter, and target entropy provably ceilings the single-step
+acceptance of any deterministic drafter — a one-sided bound computable from a
+signal Meridian already has.
+
+**What is not measured**: the phase gap itself. It needs a GPU and is not
+scheduled. So the shipped hook can only ever *reduce* draft depth, and only
+where the proved bound justifies it; conditioning on phase requires supplying
+measured rates *together with the provenance of the run that produced them*. A
+synthetic trace cannot be promoted to a published claim — that rule is enforced
+by the type system, not by documentation.
+
+The deferred experiment is fully specified in the
+[Phase 1 protocol](docs/src/notes/phase-1-protocol.md): hypotheses, models,
+sample sizes, statistic, and a decision rule fixed before any data exists.
+
 ---
 
 ## Quickstart
@@ -138,7 +175,7 @@ crates/meridian-core/    Rust scheduler core — no CUDA, no Python dep
 crates/meridian-kernels/ CUDA entropy and EAT kernels + C FFI + NIXL wrappers
 crates/meridian-python/  pyo3 bindings (built via maturin)
 python/meridian/         Python package — EntropyProbe, vLLM plugin, config
-docs/                    mdBook documentation + 7 ADRs
+docs/                    mdBook documentation + 9 ADRs + research notes
 models/                  Per-model token boundary configs (DeepSeek-R1, Qwen3, ...)
 benchmarks/              Replay harness — synthetic + real-vLLM + A/B mode
 ```
