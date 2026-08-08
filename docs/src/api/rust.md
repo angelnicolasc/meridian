@@ -16,6 +16,21 @@ cargo doc --workspace --no-deps --open
 | [`PhaseAwareBlockManager`](https://docs.rs/meridian-core/latest/meridian_core/block_manager/struct.PhaseAwareBlockManager.html) | struct | Default `BlockManager` impl |
 | [`types`](https://docs.rs/meridian-core/latest/meridian_core/types/index.html) | module | `ThinkPhase`, `PhaseEvent`, `BlockTier`, `EntropySignal`, `BlockLocation` |
 | [`MeridianConfig`](https://docs.rs/meridian-core/latest/meridian_core/config/struct.MeridianConfig.html) | struct | Deserialised TOML config |
+| [`dspark_bridge`](https://docs.rs/meridian-core/latest/meridian_core/dspark_bridge/index.html) | module | Phase-conditioned speculative decoding — bounds, hook, acceptance ledger |
+
+### `dspark_bridge` at a glance
+
+| Item | Kind | Purpose |
+|------|------|---------|
+| `confidence_model` | module | Formal model of DSpark's confidence head and Meridian's EAT/RPDI signal, plus the propositions relating them |
+| `PhaseConditioningHook` | struct | Phase label + entropy sample → recommended draft depth |
+| `AcceptanceLedger` | struct | Phase-segmented acceptance accounting; Welch comparison |
+| `Provenance` | enum | Synthetic-vs-measured gate; the only path to a publishable claim |
+| `SpeculationPhase` | enum | Coarsening of `ThinkPhase` for the speculation path |
+
+Ships uncalibrated, and stays that way until a phase-segmented measurement
+exists. See [ADR-0009](../adr/0009-phase-conditioned-speculation.md) for why an
+uncalibrated hook can only ever *shrink* a draft budget, never grow it.
 
 ## Object lifecycle
 

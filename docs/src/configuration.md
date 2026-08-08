@@ -275,6 +275,120 @@ Larger values amortise transfer overhead; smaller values reduce latency.
 
 ---
 
+## `[speculation]`
+
+Phase-conditioned speculative decoding. See
+[ADR-0009](adr/0009-phase-conditioned-speculation.md) and the
+[research note](notes/phase-conditioned-speculation.md).
+
+**Read before enabling.** The hypothesis this section exists to act on — that
+draft acceptance is lower during the think phase, because DeepSpec's released
+Qwen3 drafters were trained only on non-thinking-mode generations — has **not
+been measured**. The hook is therefore deliberately half-inert: without
+`[speculation.acceptance_prior]` it can only ever *reduce* the baseline draft
+depth, and only where the entropy probe proves a deeper draft cannot pay off.
+Only a measured prior unlocks upward adjustment and phase conditioning.
+
+### `enabled`
+
+| Property | Value |
+|----------|-------|
+| Type | `bool` |
+| Default | `false` |
+
+Master switch. When `false` the serving stack never consults the hook.
+
+### `baseline_proposal_len`
+
+| Property | Value |
+|----------|-------|
+| Type | `u32` |
+| Default | `7` |
+| Unit | tokens |
+
+Draft depth the serving stack would use without the hook, and the ceiling on
+what an uncalibrated hook may return. Defaults to 7 because DeepSpec's released
+DSpark Qwen3 checkpoints are `block7`.
+
+### `min_proposal_len` / `max_proposal_len`
+
+| Property | Value |
+|----------|-------|
+| Type | `u32` |
+| Default | `1` / `7` |
+| Valid range | `min <= baseline <= max` |
+
+Bounds on the recommended draft depth. `max_proposal_len` must not exceed the
+drafter's block size — proposing past it is not something the drafter can do.
+
+### `vocab_size`
+
+| Property | Value |
+|----------|-------|
+| Type | `u32` |
+| Default | `151936` (Qwen3) |
+| Valid range | `>= 2` |
+
+Target-model vocabulary size. Required for the entropy-derived acceptance
+ceiling, which depends on `V` as well as on entropy.
+
+### `use_entropy_ceiling`
+
+| Property | Value |
+|----------|-------|
+| Type | `bool` |
+| Default | `true` |
+
+Whether to derive a draft-depth ceiling from the entropy probe. Setting this
+`false` makes an uncalibrated hook a strict no-op — the most conservative
+posture available.
+
+### `draft_token_us` / `verify_fixed_us` / `verify_token_us`
+
+| Property | Value |
+|----------|-------|
+| Type | `f32` |
+| Default | `40.0` / `900.0` / `25.0` |
+| Unit | microseconds |
+| Valid range | `>= 0`; `verify_fixed_us > 0` |
+
+Cycle cost model driving the throughput objective
+`Θ(γ) = τ(a, γ) / (draft_token_us·γ + verify_fixed_us + verify_token_us·γ)`.
+
+**The defaults are placeholders.** They produce sane relative ordering and are
+not a measurement of any hardware. Profile your deployment and replace them; if
+`meridian.speculation.proposal_len` sits pinned at `min_proposal_len`, these are
+the first thing to check.
+
+### `[speculation.acceptance_prior]`
+
+| Property | Value |
+|----------|-------|
+| Type | table |
+| Default | absent |
+
+Measured per-phase acceptance rates. Absent until a Phase 1 run exists — see the
+[protocol](notes/phase-1-protocol.md).
+
+Every field is required: `think`, `output`, `harness`, `draft_checkpoint`,
+`target_model`, `thinking_mode`, `recorded_on`. There is deliberately **no way
+to express acceptance rates without naming the run that produced them**, so
+phase conditioning cannot be switched on by a hunch. Partial or blank provenance
+is rejected by both parsers.
+
+```toml
+[speculation.acceptance_prior]
+think            = 0.42
+output           = 0.88
+harness          = "DeepSpec@<commit-sha>"
+draft_checkpoint = "deepseek-ai/dspark_qwen3_4b_block7"
+target_model     = "Qwen/Qwen3-4B"
+thinking_mode    = true
+recorded_on      = "2026-08-07"
+```
+
+---
+
 ## `[model.<name>]`
 
 Per-model token-boundary configuration. One `[model.*]` table per model

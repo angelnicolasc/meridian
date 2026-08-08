@@ -19,6 +19,7 @@ Lifecycle: `Proposed` → `Accepted` → (later) `Superseded by ADR-NNNN` /
 | 0006 | Accepted   | [Disagg KV transfer protocol](0006-disagg-kv-transfer.md)        |
 | 0007 | Accepted   | [Release and versioning policy](0007-release-versioning-policy.md) |
 | 0008 | Accepted   | [Request preemption policy](0008-request-preemption.md)         |
+| 0009 | Accepted   | [Phase-conditioned speculation](0009-phase-conditioned-speculation.md) |
 
 ## Writing a new ADR
 

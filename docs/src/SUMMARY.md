@@ -24,7 +24,14 @@
 - [ADR-0006: Disagg KV transfer protocol](adr/0006-disagg-kv-transfer.md)
 - [ADR-0007: Release and versioning policy](adr/0007-release-versioning-policy.md)
 - [ADR-0008: Request preemption policy](adr/0008-request-preemption.md)
+- [ADR-0009: Phase-conditioned speculation](adr/0009-phase-conditioned-speculation.md)
 - [Template](adr/template.md)
+
+# Research Notes
+
+- [Phase-conditioned speculative decoding](notes/phase-conditioned-speculation.md)
+- [DeepSpec harness instrumentation gap](notes/deepspec-harness-instrumentation.md)
+- [Phase 1 experiment protocol](notes/phase-1-protocol.md)
 
 # Operations
 

@@ -20,6 +20,42 @@ when `backend="cuda"` is requested on `EntropyProbe`.
 | `meridian.MeridianConfig` | Pydantic model | Runtime configuration |
 | `meridian.load_config(path)` | function | Convenience TOML loader |
 | `meridian.vllm_plugin.MeridianSchedulerPlugin` | class | vLLM scheduler wrapper |
+| `meridian._meridian.PhaseConditioningHook` | class | Draft-depth recommendation, phase-conditioned (ADR-0009) |
+| `meridian._meridian.AcceptanceLedger` | class | Phase-segmented acceptance accounting and hypothesis test |
+
+### Phase-conditioned speculative decoding
+
+Both classes come from the native extension and require `maturin develop`.
+
+```python
+from meridian._meridian import AcceptanceLedger, PhaseConditioningHook
+
+# Ships uncalibrated: can only ever *reduce* the baseline draft depth.
+hook = PhaseConditioningHook(baseline_proposal_len=7)
+assert hook.is_calibrated is False
+policy = hook.policy_for("think")           # -> {"proposal_len": 7, "basis": "baseline", ...}
+
+# Offline analysis of a harness run.
+ledger = AcceptanceLedger.measured(
+    harness="DeepSpec@<sha>",
+    draft_checkpoint="deepseek-ai/dspark_qwen3_4b_block7",
+    target_model="Qwen/Qwen3-4B",
+    thinking_mode=True,
+    recorded_on="2026-08-07",
+)
+ledger.record("think", accepted_length=3, proposal_length=7)
+ledger.record("output", accepted_length=6, proposal_length=7)
+print(ledger.render())
+verdict = ledger.verdict(between_domain_gap=0.5)
+```
+
+`policy_for` accepts either the short phase names (`"think"`, `"output"`) or the
+router's own `phase_of_kind` labels (`"think_decode"`, `"output_decode"`).
+
+A ledger built with `AcceptanceLedger.synthetic(fixture)` computes the same
+statistics but raises `ValueError` from `measured_claim()` — synthetic traces
+cannot be promoted to published results. See
+[ADR-0009](../adr/0009-phase-conditioned-speculation.md).
 
 ## Object lifecycle
 

@@ -187,6 +187,70 @@ your alerting stack.
 
 ---
 
+### `meridian.speculation.policy_basis{phase,basis}`
+
+| Property | Value |
+|----------|-------|
+| Type | counter |
+| Unit | decisions |
+| Labels | `phase` ∈ `{prefill, think, output, complete}`, `basis` ∈ `{baseline, not_decoding, entropy_ceiling, measured_prior, measured_prior_capped_by_entropy}` |
+| Cardinality | ≤ 20 series |
+| Source | `dspark_bridge::PhaseConditioningHook` |
+| Why | Reports on what authority each draft-depth decision rests. `baseline` means the hook did nothing; `entropy_ceiling` means a proved bound justified a shallower draft; `measured_*` means a calibrated prior is in play. |
+
+**Operator action**: until Phase 1 of the phase-conditioned-speculation work has
+run, a healthy deployment shows **zero** samples with a `measured_*` basis. Any
+`measured_*` traffic means someone installed a
+`[speculation.acceptance_prior]` — check it names a real run. See
+[ADR-0009](../adr/0009-phase-conditioned-speculation.md).
+
+---
+
+### `meridian.speculation.proposal_len{phase}`
+
+| Property | Value |
+|----------|-------|
+| Type | histogram |
+| Unit | tokens |
+| Labels | `phase` |
+| Source | `dspark_bridge::PhaseConditioningHook` |
+| Why | The recommended draft depth. Compare against `speculation.baseline_proposal_len`: a distribution pinned at the baseline means the entropy ceiling never binds; one pinned at `min_proposal_len` means it always does. |
+
+**Operator action**: if the histogram sits at `min_proposal_len` across both
+phases, the cost model constants are likely wrong for your hardware — profile
+and set `draft_token_us` / `verify_fixed_us` / `verify_token_us`. They ship as
+placeholders, not measurements.
+
+---
+
+### `meridian.speculation.accepted_length{phase}`
+
+| Property | Value |
+|----------|-------|
+| Type | histogram |
+| Unit | tokens (bonus token included) |
+| Labels | `phase` ∈ `{think, output}` |
+| Source | `dspark_bridge::AcceptanceLedger` |
+| Why | Observed accepted draft length per verification step, segmented by phase. This is the quantity the Phase 1 hypothesis is about. Uses DeepSpec's definition so the numbers are comparable to its published tables. |
+
+---
+
+### `meridian.speculation.straddling_steps`
+
+| Property | Value |
+|----------|-------|
+| Type | counter |
+| Unit | events |
+| Cardinality | 1 series |
+| Source | `dspark_bridge::AcceptanceLedger` |
+| Why | Verification steps whose committed span crossed the `</think>` boundary and so belong cleanly to neither phase. |
+
+**Operator action**: compare against the total recorded steps. Above ~5 %, phase
+attribution is too coarse relative to the draft block size and any think-vs-output
+comparison drawn from it should be discarded rather than caveated.
+
+---
+
 ## OTLP export
 
 Prometheus is the primary metric surface. When `[telemetry] otlp_enabled = true`
@@ -212,3 +276,5 @@ reconstructed from trace data.
 | `queue_depth{queue=think}` | P95 > 4× baseline for 5 min with no forcing | Medium — starvation risk |
 | `budget_force_reason{reason=hard_cap}` | ratio > 0.5 over 1 h | Low — probe investigation |
 | `phase_router.tracked_requests` | monotonically growing > 15 min | Low — reap misconfiguration |
+| `speculation.policy_basis{basis=measured_prior}` | rate > 0 while no measurement is on file | Medium — unverified policy in production |
+| `speculation.straddling_steps` | > 5% of recorded steps | Medium — phase attribution unreliable |
